@@ -19,6 +19,7 @@ header = {
     'X-BTK-APIKEY': API_KEY,
 }
 
+
 #///////////////////////////////////////////////////////////////////
 
 def initialization():  
@@ -29,19 +30,18 @@ def initialization():
     trade = tradeAPI()
     #--------------------------variable-----------------------------
     #ProductSetting
-    global symbol, symbolSplit, lotSizeOpen, lotSizeClose
+    global symbol, symbolSplit
     symbol = 'THB_XRP'  # THB_XRP
     symbolSplit =  symbol.split("_")
-    lotSizeOpen = 10 #THB
-    lotSizeClose = 10 #XRP
     #Grid
     global transactionCost,maxPrice,minPrice,priceTick,delta
     transactionCost= 0.005#0.5%
-    maxPrice = 10
+    maxPrice = 0
     minPrice = 0
     priceTick = 0.1
     delta  = 0.1
     #SystemSetitng
+    global system,realTrade
     system = True #While loop
     realTrade = False
     loadArray = False
@@ -54,11 +54,10 @@ def initialization():
     for x in range(len(SymbolsInfo)):
         if(SymbolsInfo[x]['symbol'] == symbol):
             print("Id : %s,  Symbol : %s [%s]" %(SymbolsInfo[x]['id'] ,SymbolsInfo[x]['symbol'] ,SymbolsInfo[x]['info'])) 
-            SymlId = SymbolsInfo[x]['id']
             break
-            
-    print("lotSizeOpen {:0.2f}".format(lotSizeOpen))       
-    print("lotSizeClose {:0.2f}".format(lotSizeClose))       
+    if(minPrice>maxPrice):print('minPrice must lest than maxPrice')
+    if(minPrice>maxPrice):system = False       
+ 
     print("range [{:0.2f} - {:0.2f}]".format(minPrice,maxPrice))   
     print("priceTick {:0.2f}".format(priceTick))   
     print(f"RealTrade {realTrade}")
@@ -91,7 +90,8 @@ def initialization():
 #----------------------------------------------------------------------------
 #ปรับ vol. ในการส่งคำสั่ง
 def lotSize():
-    return lotSizeOpen 
+    lot = 10
+    return lot 
 
 #กำหนดฟังก์ชั่นในการส่วคำสั่ง ถ้าไม่ใส่จะเป็น CS ธรรมดา
 def tradeFunction():
@@ -104,15 +104,14 @@ def lineSendMas(msg_line):
     url_line = 'https://notify-api.line.me/api/notify'
     token_line = 'QHQPbxDrgD35meR5LDh0PniRVDGYUBNrH8ls42ThiKM'
     headers_line = {'content-type':'application/x-www-form-urlencoded','Authorization':'Bearer '+token_line}
-    reg_line = requests.post(url_line, headers=headers_line , data = {'message':msg_line})
+    requests.post(url_line, headers=headers_line , data = {'message':msg_line})
+
 #///////////////////////////////////////////////////////////////////
 #สร้าง class Account : class นี้จะจัดการงานเกี่ยวกับบัญชีเก็บ log จัดการงานทัวไป
 class  accountManagement: 
    #สร้างตัวแปรที่จำเป็นต้องใช้
     def __init__(self):
         self._client=MongoClient("mongodb+srv://wasan:1234@cluster0.ujivx.gcp.mongodb.net/trading_db?retryWrites=true&w=majority")
-        
-        
         self._db=self._client.get_database('trading_db')   
         self.port = { 'initialize': 0.0, 
                   'equity': 0.0, 
@@ -123,27 +122,27 @@ class  accountManagement:
   
     #------Real-----
     #ดึงข้อมูล สถานะ เงินทุน กำไร etc   
-    def load_port(self):
+    def load_port(self,port):
         print("#") 
 
     #บันทึกข้อมูล สถานะ เงินทุน กำไร etc   
-    def save_port(self):
+    def save_port(self,port):
         print("#") 
 
     #ส่วนการเทรด
     #โหลดข้อมูลส่วน array ซึ่งจะเก็บสถานะไม้ CS ที่เปิดค้างไว้อยู่
     def load_order(self):
         if (self._db.bitkub_trade.count_documents({}))==0:
-            arr=[]
+            self.arr=[]
         else:
-            arr=[]
-            for data in _db.bitkub_trade.find({}):
-                arr.append(data)
-        return arr
+            self.arr=[]
+            for data in self._db.bitkub_trade.find({}):
+                self.arr.append(data)
+        return self.arr
 
     #บันทึกข้อมูลส่วน array ซึ่งจะเก็บสถานะไม้ CS ที่เปิดค้างไว้อยู่
     def save_order(self,arr):
-        self.clear_db('bitkub_trade');
+        self.clear_db('bitkub_trade')
         res = self._db.bitkub_trade.insert_many(arr)
         return res
 
@@ -154,12 +153,12 @@ class  accountManagement:
 
     #----clear worksheet
     def clear_db(self,collection):
-        coll = self._db[collection]
-        res_del = coll.delete_many({})
-        #print(res_del.deleted_count, " documents deleted.") 
+        self._db[collection].delete_many({})
+
         
     def findID(self,collection,ID):
         return print(self._db[collection].find_one({"_id": ID}))
+
 #///////////////////////////////////////////////////////////////////
 class marketAPI:
     #API sub function
@@ -167,7 +166,7 @@ class marketAPI:
         return json.dumps(data, separators=(',', ':'), sort_keys=True)
 
     def _sign(self,data):
-            j = json_encode(data)
+            j = self._json_encode(data)
             h = hmac.new(API_SECRET, msg=j.encode(), digestmod=hashlib.sha256)
             return h.hexdigest()
     
@@ -219,7 +218,7 @@ class  tradeAPI:
         return json.dumps(data, separators=(',', ':'), sort_keys=True)
 
     def _sign(self,data):
-            j = json_encode(data)
+            j = self._json_encode(data)
             h = hmac.new(API_SECRET, msg=j.encode(), digestmod=hashlib.sha256)
             return h.hexdigest()
     
@@ -241,14 +240,20 @@ class  tradeAPI:
             print(res)
             return json.loads(res.text)["error"]
      #-----------------
-
+    def getServerTime(self):
+        try:
+            res = requests.get(API_HOST + '/api/servertime')
+            return int(res.text)
+        except:
+             return json.loads(res.text)['error']
+    
     def placeOrder(self, sym: str, orderType: str, lot: float, price: float, typ: str):
         data = {
             'sym': sym, #Symbol
             'amt': lot, # XRP amount you want to spend
             'rat': price, #Price
             'typ': typ,#Order type: limit or market
-            'ts': ts,
+            'ts': self.getServerTime(),
                 }
         if(orderType=='buy'):
             res = self._post('/api/market/place-ask',data)
@@ -262,7 +267,7 @@ class  tradeAPI:
             'amt': lot, # XRP amount you want to spend
             'rat': price, #Price
             'typ': typ,#Order type: limit or market
-            'ts': ts,
+            'ts': self.getServerTime(),
                 }
         if(orderType=='buy'):
             res = self._post('/api/market/place-ask/test',data)
@@ -275,11 +280,11 @@ class  tradeAPI:
 def OrderSend(market,orderType,lot,price,mktType):
     if(realTrade == True):
         #ยิง order และรับค่าที่ return มา ถ้ายิงจริงจะมาปรับปรุงส่วนนี้เพิ่มเติม
-        res = trade.placeOrder(market,orderType,lot,price,mktType)
+        res = trade.placeOrder(market,orderType,lot,price,'market')
 
     else:
-        res = trade.testPlaceOrder(market,orderType,lot,price,mktType)
-        #res = { 'hash':'Test', 'amt': lotSize(), 'rat':price, 'ts':date_time, 'rec':price*orderType,}        
+        res = trade.testPlaceOrder(market,orderType,lot,price,'market')
+        #res = { 'hash':'Test', 'amt': lotSize(), 'rat':price, 'ts':date_time, 'rec':price*lot,}        
     return res
 
                             
@@ -294,26 +299,27 @@ def OrderClose(order):
         price = ask
         
     if(realTrade == True):
-        res = trade.place_order(order['symbol'],orderType,lot,price,'market')
+        res = trade.placeOrder(order['symbol'],orderType,lot,price,'market')
     else:
         res = trade.testPlaceOrder(order['symbol'],orderType,lot,price,'market')
-        #res = {'hash':'Test', 'rat':price, 'ts':date_time, 'rec':price*orderType,}        
+        #res = {'hash':'Test', 'rat':price, 'ts':date_time, 'rec':price*lot,}        
     return res
 #///////////////////////////////////////////////////////////////////
 def main():
     zone=0 #set zone zero
     date_time = time.strftime('%Y-%m-%d %H:%M:%S')
     #[0]orderId [1]timestamp [2]volume [3]rate [4]amount
+    global bid,ask
     bid = market.getBids(symbol)[0][3]
     ask = market.getAsks(symbol)[0][3]
     
     #----condition----
     #set ตัวแปรเริ่มต้น
-    orderOpen = True
-    orderClose = False
+    openOrder = True
+    closeOrder = False
     
-    if((ask//priceTick)%10 == 0        
-    and logicFunction() == True):
+    if((ask//priceTick)%10 == 0
+    and tradeFunction() == True):
         zone = (ask//priceTick)*priceTick
         for i in range(len(posList)):
             #เมื่อโซนปัจจุบันไม่มีบันทึกใน array จะยิง buy order
@@ -324,13 +330,15 @@ def main():
                 closeOrder = True
          
         #------ balance check ------
-        if(market.balance[symbolSplit[0]]['available'] < ((lotSize()*ask) or (lotSize()*ask))  ): openOrder == False
+        if(market.balance()[symbolSplit[0]]['available'] < ((lotSize()*ask) or (lotSize()*ask))  ): openOrder == False
         #-----openOrder
-        if(openOrder == True):
+        if(openOrder == True
+          and ((ask<maxPrice and ask>minPrice) or  (minPrice and minPrice) ==0)
+          ):
         #รับค่าที่ได้จาก condition ชุดคำสั่ง Buy 
             res = OrderSend(symbol,'buy',lotSize(),ask,'market')
             #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
-            if(res != true):
+            if(res != True):
                 Order  = {
                         'symbol':symbol,
                         'type':'buy',
@@ -355,7 +363,7 @@ def main():
                 #save trade
                 acc.save_order(posList)
                 #sent log
-                lineSendMas(f'open {symbol} {p_comment} \r\n{p_siz} {bid}') 
+                lineSendMas(f'open {symbol} {p_comment} \r\n{p_size} {bid}') 
                 print(f'open {symbol} {p_comment} {p_openPrice} {p_size} {p_recive} {p_tm}',end="\r")
                 print('')
             else:
@@ -366,7 +374,7 @@ def main():
                 #รับค่าที่ได้จาก fn
                 res = OrderClose(posList[i])
                 #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
-                if(res != 'true'):
+                if(res != True):
                     #add createOrder ใน list 
                     posList[i]['closeHash'] = res["hash"]
                     posList[i]['closePrice'] = res["rat"]
@@ -399,12 +407,13 @@ def main():
     #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
     
     #ใช้กับ CMD
-    print('BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,datetime.now().strftime('%Y-%m-%d %H:%M:%S')),end="\r")
+    print('BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="\r")
+
 
 #///////////////////////////////////////////////////////////////////
 
 if __name__ == "__main__":
     initialization()
-    while(True):
+    while(system):
         main()
         time.sleep(1)  
