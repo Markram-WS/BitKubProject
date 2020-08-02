@@ -44,9 +44,9 @@ def initialization():
     global system,realTrade
     system = True #While loop
     realTrade = False
-    loadArray = False
-    clearArray = True
-    clearLog = True
+    loadOrder = False
+    clearOrder = True
+    clearHistory = True
     setPort = False
     
     #--------------------------SymbolsInfo-----------------------------
@@ -65,14 +65,14 @@ def initialization():
     #--------------------------Array  initialization-----------------------------  
     global posList
     posList=[]
-    if(loadArray):
+    if(loadOrder):
         posList = acc.load_order()
 
     #---------Clear-------
-    if(clearArray):
+    if(clearOrder):
         acc.clear_db('bitkub_trade')
         print("-clearOrder")
-    if(clearLog):
+    if(clearHistory):
         acc.clear_db('bitkub_history')
         print("-clearHistory")
     #---------Setport-------  
