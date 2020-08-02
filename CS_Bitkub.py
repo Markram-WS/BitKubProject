@@ -34,12 +34,15 @@ def initialization():
     symbol = 'THB_XRP'  # THB_XRP
     symbolSplit =  symbol.split("_")
     #Grid
-    global transactionCost,maxPrice,minPrice,priceTick,delta
-    transactionCost= 0.005#0.5%
+    global transactionCost,maxPrice,minPrice,priceTick,delta,decimal,makeFees,takeFees
+    makeFees= 0.0025#0.25%
+    takeFees= 0.0025#0.25%
     maxPrice = 0
     minPrice = 0
     priceTick = 0.1
     delta  = 0.1
+    decimal = 2
+    commission =0.0025
     #SystemSetitng
     global system,realTrade
     system = True #While loop
@@ -90,7 +93,7 @@ def initialization():
 #----------------------------------------------------------------------------
 #ปรับ vol. ในการส่งคำสั่ง
 def lotSize():
-    lot = 10
+    lot = 10.0
     return lot 
 
 #กำหนดฟังก์ชั่นในการส่วคำสั่ง ถ้าไม่ใส่จะเป็น CS ธรรมดา
@@ -133,18 +136,21 @@ class  accountManagement:
     #โหลดข้อมูลส่วน array ซึ่งจะเก็บสถานะไม้ CS ที่เปิดค้างไว้อยู่
     def load_order(self):
         if (self._db.bitkub_trade.count_documents({}))==0:
-            self.arr=[]
+            arr=[]
         else:
-            self.arr=[]
+            arr=[]
             for data in self._db.bitkub_trade.find({}):
-                self.arr.append(data)
-        return self.arr
+                arr.append(data)
+        return arr
 
     #บันทึกข้อมูลส่วน array ซึ่งจะเก็บสถานะไม้ CS ที่เปิดค้างไว้อยู่
     def save_order(self,arr):
         self.clear_db('bitkub_trade')
-        res = self._db.bitkub_trade.insert_many(arr)
-        return res
+        if(len(arr) != 0):
+            res = self._db.bitkub_trade.insert_many(arr)
+            return res
+        else: 
+            res = 'empty array'
 
     #บันทึกlog ในการยิงคำสั่งแต่ละครัง
     def save_log(self,arr):
@@ -172,11 +178,11 @@ class marketAPI:
     
     def _get(self,url): 
         try:
-            res = requests.get(API_HOST + url)
+            res = requests.get(API_HOST + url,timeout = 60)
             return json.loads(res.text)["result"]
         except:
-            print(res)
-            return json.loads(res.text)["error"]
+            print(f'Error:{res}',end="\r")
+            return False
     
     def _post(self,url,data): 
         try:
@@ -185,8 +191,8 @@ class marketAPI:
             res = requests.post(API_HOST + url, headers=header, data=self._json_encode(data))
             return json.loads(res.text)["result"]
         except:
-            print(res)
-            return json.loads(res.text)["error"]
+            print(f'Error:{res}',end="\r")
+            return False
         
     #API function
     def getServerTime(self):
@@ -227,8 +233,8 @@ class  tradeAPI:
             res = requests.get(API_HOST + url)
             return json.loads(res.text)["result"]
         except:
-            print(res)
-            return json.loads(res.text)["error"]
+            print(f'Error:{res}',end="\r")
+            return False
     
     def _post(self,url,data): 
         try:
@@ -237,8 +243,8 @@ class  tradeAPI:
             res = requests.post(API_HOST + url, headers=header, data=self._json_encode(data))
             return json.loads(res.text)["result"]
         except:
-            print(res)
-            return json.loads(res.text)["error"]
+            print(f'Error:{res}',end="\r")
+            return False
      #-----------------
     def getServerTime(self):
         try:
@@ -291,13 +297,13 @@ def OrderSend(market,orderType,lot,price,mktType):
 def OrderClose(order):
     if(order['type']=='buy'):
         orderType = 'sell'
-        lot = lotSize()
         price = bid
+        lot = lotSize()
     else:
         orderType = 'buy'
-        lot = lotSize()
         price = ask
-        
+        lot = lotSize()
+
     if(realTrade == True):
         res = trade.placeOrder(order['symbol'],orderType,lot,price,'market')
     else:
@@ -312,21 +318,21 @@ def main():
     global bid,ask
     bid = market.getBids(symbol)[0][3]
     ask = market.getAsks(symbol)[0][3]
-    
     #----condition----
     #set ตัวแปรเริ่มต้น
     openOrder = True
     closeOrder = False
     
     if((ask//priceTick)%10 == 0
-    and tradeFunction() == True):
+    and tradeFunction() == True
+    and ask != False):
         zone = (ask//priceTick)*priceTick
         for i in range(len(posList)):
             #เมื่อโซนปัจจุบันไม่มีบันทึกใน array จะยิง buy order
             if(zone == float(posList[i]['comment'])):
                 openOrder = False
             #เมื่อโซนก่อนหน้านี้มีระยะ = delta ใน array จะยิง sell order
-            if(zone < float(posList[i]['comment']) + delta):
+            if(zone > float(posList[i]['comment']) + delta):
                 closeOrder = True
          
         #------ balance check ------
@@ -346,7 +352,7 @@ def main():
                         'openHash':res["hash"],
                         'openPrice':res["rat"],
                         'openTime':res["ts"],
-                        'recive':res["rec"],
+                        'recive':res["rat"]*res["amt"]*(1-makeFees),
                         'closeHash':'',
                         'closePrice':0,
                         'closeTime':0,
@@ -363,8 +369,8 @@ def main():
                 #save trade
                 acc.save_order(posList)
                 #sent log
-                lineSendMas(f'open {symbol} {p_comment} \r\n{p_size} {bid}') 
-                print(f'open {symbol} {p_comment} {p_openPrice} {p_size} {p_recive} {p_tm}',end="\r")
+                lineSendMas(f'Open {symbol} {p_comment} \r\n{p_size} {round(bid,decimal)}') 
+                print(f'Open {symbol} {p_comment} {round(p_openPrice,decimal)} {p_size} {round(p_recive,decimal)} {p_tm}',end="\r")
                 print('')
             else:
                 res       
@@ -379,7 +385,7 @@ def main():
                     posList[i]['closeHash'] = res["hash"]
                     posList[i]['closePrice'] = res["rat"]
                     posList[i]['closeTime'] = res["ts"]
-                    posList[i]['profit'] = res["rec"] -  posList[i]['openPrice']
+                    posList[i]['profit'] = ( posList[i]['size'] *res["rat"]*(1-takeFees) ) -  posList[i]['recive']
                     
                     p_comment=posList[i]['comment']
                     p_size=res['size']
@@ -392,8 +398,8 @@ def main():
                     acc.save_log(posList[i])
                     
                     #sent log
-                    lineSendMas(f'open {symbol} {p_comment} {p_recive}\r\n{p_size} {bid}') 
-                    print(f'open {symbol} {p_comment} {p_closePrice} {p_size} {p_recive} {p_tm}',end="\r")
+                    lineSendMas(f'Close {symbol} {p_comment} {round(p_recive,decimal)}\r\n{p_size} {round(bid,decimal)}') 
+                    print(f'Close {symbol} {p_comment} {round(p_closePrice,decimal)} {p_size} {round(p_recive,decimal)} {p_tm}',end="\r")
                     print('')
                     
                     #update arr
@@ -407,13 +413,12 @@ def main():
     #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
     
     #ใช้กับ CMD
-    print('BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="\r")
+    if(ask != False):
+        print('BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="\r")
 
 
 #///////////////////////////////////////////////////////////////////
-
-if __name__ == "__main__":
-    initialization()
-    while(system):
-        main()
-        time.sleep(1)  
+initialization()
+while(system):
+    main()
+    time.sleep(1)  
