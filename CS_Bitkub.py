@@ -39,7 +39,7 @@ def initialization():
     takeFees= 0.0025#0.25%
     maxPrice = 0
     minPrice = 0
-    priceTick = 0.1
+    priceTick = 0.01
     delta  = 0.1
     decimal = 2
     commission =0.0025
@@ -178,7 +178,7 @@ class marketAPI:
     
     def _get(self,url): 
         try:
-            res = requests.get(API_HOST + url,timeout = 60)
+            res = requests.get(API_HOST + url)
             return json.loads(res.text)["result"]
         except:
             print(f'Error:{res}',end="\r")
@@ -251,34 +251,45 @@ class  tradeAPI:
             res = requests.get(API_HOST + '/api/servertime')
             return int(res.text)
         except:
-             return json.loads(res.text)['error']
+            print(f'Error:{res}',end="\r")
+            return False
     
     def placeOrder(self, sym: str, orderType: str, lot: float, price: float, typ: str):
-        data = {
+        tm=self.getServerTime()
+        if(tm != False):
+            data = {
             'sym': sym, #Symbol
             'amt': lot, # XRP amount you want to spend
             'rat': price, #Price
             'typ': typ,#Order type: limit or market
-            'ts': self.getServerTime(),
+            'ts': tm,
                 }
-        if(orderType=='buy'):
-            res = self._post('/api/market/place-ask',data)
-        if(orderType=='sell'):
-            res = self._post('/api/market/place-bid',data)
+            if(orderType=='buy'):
+                res = self._post('/api/market/place-ask',data)
+            if(orderType=='sell'):
+                res = self._post('/api/market/place-bid',data)
+        else:
+            print('can not placeOrder')
+            return False
         return res
     
     def testPlaceOrder(self, sym: str, orderType: str, lot: float, price: float, typ: str):
-        data = {
+        tm=self.getServerTime()    
+        if(tm != False):
+            data = {
             'sym': sym, #Symbol
             'amt': lot, # XRP amount you want to spend
             'rat': price, #Price
             'typ': typ,#Order type: limit or market
             'ts': self.getServerTime(),
                 }
-        if(orderType=='buy'):
-            res = self._post('/api/market/place-ask/test',data)
-        if(orderType=='sell'):
-            res = self._post('/api/market/place-bid/test',data)
+            if(orderType=='buy'):
+                res = self._post('/api/market/place-ask/test',data)
+            if(orderType=='sell'):
+                res = self._post('/api/market/place-bid/test',data)
+        else:
+            print('can not placeOrder')
+            return False
         return res
 #///////////////////////////////////////////////////////////////////
 #---------------------------sent order FUNCTION ---------------------------
@@ -316,36 +327,41 @@ def main():
     date_time = time.strftime('%Y-%m-%d %H:%M:%S')
     #[0]orderId [1]timestamp [2]volume [3]rate [4]amount
     global bid,ask
+    
     bid = market.getBids(symbol)[0][3]
     ask = market.getAsks(symbol)[0][3]
-    #----condition----
-    #set ตัวแปรเริ่มต้น
-    openOrder = True
-    closeOrder = False
+
+    if(ask != False):
+        #----condition----
+        #set ตัวแปรเริ่มต้น
+        openOrder = True
+        closeOrder = False
     
-    if((ask//priceTick)%10 == 0
-    and tradeFunction() == True
-    and ask != False):
-        zone = (ask//priceTick)*priceTick
-        for i in range(len(posList)):
-            #เมื่อโซนปัจจุบันไม่มีบันทึกใน array จะยิง buy order
-            if(zone == float(posList[i]['comment'])):
-                openOrder = False
-            #เมื่อโซนก่อนหน้านี้มีระยะ = delta ใน array จะยิง sell order
-            if(zone > float(posList[i]['comment']) + delta):
-                closeOrder = True
+        if((ask//priceTick)%2 == 0
+        and tradeFunction() == True):
+            zone = round((ask//priceTick)*priceTick,decimal)
+            for i in range(len(posList)):
+                #เมื่อโซนปัจจุบันไม่มีบันทึกใน array จะยิง buy order
+                if(zone == float(posList[i]['comment'])):
+                    openOrder = False
+                #เมื่อโซนก่อนหน้านี้มีระยะ = delta ใน array จะยิง sell order
+                if(zone > float(posList[i]['comment']) + delta):
+                    closeOrder = True
          
-        #------ balance check ------
-        if(market.balance()[symbolSplit[0]]['available'] < ((lotSize()*ask) or (lotSize()*ask))  ): openOrder == False
-        #-----openOrder
-        if(openOrder == True
-          and ((ask<maxPrice and ask>minPrice) or  (minPrice and minPrice) ==0)
-          ):
-        #รับค่าที่ได้จาก condition ชุดคำสั่ง Buy 
-            res = OrderSend(symbol,'buy',lotSize(),ask,'market')
-            #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
-            if(res != True):
-                Order  = {
+            #------ balance check ------
+            '''
+            if(market.balance()[symbolSplit[0]]['available'] < (lotSize()*ask) and realTrade == True ):
+                openorder = False
+                print('not enough margin!')
+            '''
+            #-----openOrder
+            if(openOrder == True
+            and ((ask<maxPrice and ask>minPrice) or  (minPrice and minPrice) ==0)):
+            #รับค่าที่ได้จาก condition ชุดคำสั่ง Buy 
+                res = OrderSend(symbol,'buy',lotSize(),ask,'market')
+                #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
+                if(res != False):
+                    Order  = {
                         'symbol':symbol,
                         'type':'buy',
                         'size':res["amt"],
@@ -359,61 +375,58 @@ def main():
                         'profit':0,
                         'comment':f'{zone}'
                     }
-                p_comment=Order['comment']
-                p_size=Order['size']
-                p_openPrice=Order['openPrice']
-                p_recive=Order["recive"]
-                p_tm=Order["openTime"]
-                #add createOrder ใน list 
-                posList.append(Order)
-                #save trade
-                acc.save_order(posList)
-                #sent log
-                lineSendMas(f'Open {symbol} {p_comment} \r\n{p_size} {round(bid,decimal)}') 
-                print(f'Open {symbol} {p_comment} {round(p_openPrice,decimal)} {p_size} {round(p_recive,decimal)} {p_tm}',end="\r")
-                print('')
-            else:
-                res       
-                               
-            #-----closeOrder
-            if(closeOrder == True):
-                #รับค่าที่ได้จาก fn
-                res = OrderClose(posList[i])
-                #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
-                if(res != True):
+                    p_comment=Order['comment']
+                    p_size=Order['size']
+                    p_openPrice=Order['openPrice']
+                    p_recive=Order["recive"]
+                    p_tm=Order["openTime"]
                     #add createOrder ใน list 
-                    posList[i]['closeHash'] = res["hash"]
-                    posList[i]['closePrice'] = res["rat"]
-                    posList[i]['closeTime'] = res["ts"]
-                    posList[i]['profit'] = ( posList[i]['size'] *res["rat"]*(1-takeFees) ) -  posList[i]['recive']
-                    
-                    p_comment=posList[i]['comment']
-                    p_size=res['size']
-                    p_closePrice=posList[i]['closePrice']
-                    p_recive=posList[i]["profit"]
-                    p_tm= posList[i]['closeTime']
-                    
-                    
-                    #update history
-                    acc.save_log(posList[i])
-                    
-                    #sent log
-                    lineSendMas(f'Close {symbol} {p_comment} {round(p_recive,decimal)}\r\n{p_size} {round(bid,decimal)}') 
-                    print(f'Close {symbol} {p_comment} {round(p_closePrice,decimal)} {p_size} {round(p_recive,decimal)} {p_tm}',end="\r")
-                    print('')
-                    
-                    #update arr
-                    del posList[i]
+                    posList.append(Order)
                     #save trade
                     acc.save_order(posList)
-                else:
-                    res
+                    #sent log
+                    lineSendMas(f'Open {symbol} {p_comment} \r\n{p_size} {round(bid,decimal)}') 
+                    print(f'Open {symbol} {p_comment} {round(p_openPrice,decimal)} {p_size} {round(p_recive,decimal)} {p_tm}',end="\r")
+                    print('')
+  
+                               
+                #-----closeOrder
+                if(closeOrder == True):
+                    #รับค่าที่ได้จาก fn
+                    res = OrderClose(posList[i])
+                    #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
+                    if(res != False):
+                        #add createOrder ใน list 
+                        posList[i]['closeHash'] = res["hash"]
+                        posList[i]['closePrice'] = res["rat"]
+                        posList[i]['closeTime'] = res["ts"]
+                        posList[i]['profit'] = ( posList[i]['size'] *res["rat"]*(1-takeFees) ) -  posList[i]['recive']
+                    
+                        p_comment=posList[i]['comment']
+                        p_size=res['size']
+                        p_closePrice=posList[i]['closePrice']
+                        p_recive=posList[i]["profit"]
+                        p_tm= posList[i]['closeTime']
+                    
+                    
+                        #update history
+                        acc.save_log(posList[i])
+                    
+                        #sent log
+                        lineSendMas(f'Close {symbol} {p_comment} {round(p_recive,decimal)}\r\n{p_size} {round(bid,decimal)}') 
+                        print(f'Close {symbol} {p_comment} {round(p_closePrice,decimal)} {p_size} {round(p_recive,decimal)} {p_tm}',end="\r")
+                        print('')
+                    
+                        #update arr
+                        del posList[i]
+                        #save trade
+                        acc.save_order(posList)
 
-    #ใช้กับ google Code
-    #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
+
+        #ใช้กับ google Code
+        #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
     
-    #ใช้กับ CMD
-    if(ask != False):
+        #ใช้กับ CMD
         print('BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="\r")
 
 
