@@ -46,7 +46,6 @@ def initialization():
     global system,realTrade
     system = True #While loop
     realTrade = False
-    loadOrder = True
     clearOrder = False
     clearHistory = False
     setPort = False
@@ -260,7 +259,7 @@ class  tradeAPI:
             print(f'Error:{res}',end="\r")
             return False
     
-    def placeOrder(self, sym: str, orderType: str, lot: float, price: float, typ: str):
+    def placeOrder(self, sym: str, orderType: str, amt: float, price: float, typ: str):
         tm=self.getServerTime()
         if(tm != False):
             data = {
@@ -313,7 +312,7 @@ def OrderSend(market,orderType,amt,price,mktType):
                 'rat':price, 
                 "fee": makeFees, 
                 "cre": 0,
-                'rec':(order['amt']/price)*(1-fee),
+                'rec':(amt/price)*(1-makeFees),
                 "ts": date_time }        
     return res
 
@@ -329,12 +328,12 @@ def OrderClose(order):
         fee = takeFees
 
     if(realTrade == True):
-        res = trade.placeOrder(order['symbol'],orderType,order['amt'],price,'market')
+        res = trade.placeOrder(order['symbol'],orderType,order['size'],price,'market')
     else:
         #res = trade.testPlaceOrder(order['symbol'],orderType,lot,price,'market')
         res = { "id":"Test", 
                 'hash':'Test', 
-                'amt': order['amt'], 
+                'amt': order['size'], 
                 'rat':price, 
                 "fee": makeFees, 
                 "cre": 0,
@@ -370,7 +369,7 @@ def main():
                         posList[i]['closeHash'] = res["hash"]
                         posList[i]['closePrice'] = res["rat"]
                         posList[i]['closeTime'] = res["ts"]
-                        posList[i]['profit'] = ( posList[i]['amt'] /res["rat"]*(1-takeFees) ) -  posList[i]['recive']
+                        posList[i]['profit'] = ( posList[i]['size'] /res["rat"]*(1-takeFees) ) -  posList[i]['recive']
 
                         comment     =   posList[i]['comment']
                         size         =  posList[i]['size']
@@ -415,7 +414,7 @@ def main():
                 #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
                 if(res != False):
                     Order  = {
-                        'symbol':res['market'],
+                        'symbol':symbol,
                         'type':orderType,
                         'size':res["amt"],
                         'openHash':res["hash"],
