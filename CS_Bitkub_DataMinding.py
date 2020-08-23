@@ -21,6 +21,7 @@ header = {
 }
 
 #///////////////////////////////////////////////////////////////////
+
 def initialization():  
     print("----------- initialize -----------")
     global market,acc,trade
@@ -96,6 +97,7 @@ def initialization():
         
     print("----------- start -----------")
 
+#///////////////////////////////////////////////////////////////////
 
 #ปรับ vol. ในการส่งคำสั่ง
 def amtSize():
@@ -106,31 +108,45 @@ def amtSize():
 def closeOrder():
     # ask//priceTick ทำให้ทศนิยม priceTick ตำแหน่งกลายเป็นจำนวณเต็ม
     # %2 focus จำนวณที่ 2 หารลงตัว
-    #initialize
-    condition1 = False
-    condition2 = False
-    conditions = False
-    #condition
-    if(((ask/priceTick)/1)%2.0 == 0.0): condition1 = True
-    if( (ask <= maxPrice and ask >= minPrice ) or ( maxPrice == 0 and minPrice == 0 ) ): condition2 = True
-    #SumCondition
-    if(condition2 == True):conditions = True
+    #-----initialize-----
+    condition_price     =   False
+
+    conditions  =   False
+    #-----condition-----
+    #price check
+    if(((ask/priceTick)/1)%5.0 == 0.0): condition_price = True
+         
+    #-----SumCondition-----
+    if(True):conditions = True
     return conditions
 
 def openOrder():
     # ask//priceTick ทำให้ทศนิยม priceTick ตำแหน่งกลายเป็นจำนวณเต็ม
     # %2 focus จำนวณที่ 2 หารลงตัว
-    #initialize
-    condition1 = False
-    condition2 = False
-    conditions = False
-    #condition
-    if(((ask/priceTick)/1)%2.0 == 0.0): condition1 = True
-    if( (ask <= maxPrice and ask >= minPrice ) or ( maxPrice == 0 and minPrice == 0 ) ): condition2 = True
-    #SumCondition
+    #-----initialize-----
+    condition_price     =   False
+    condition_rang      =   False
+    condition_balance   =   False
+
+    conditions  =   False
+    #-----condition-----
+    #price check
+    if(((ask/priceTick)/1)%5.0 == 0.0): condition_price = True
+    #rang check
+    if( (ask <= maxPrice and ask >= minPrice ) or ( maxPrice == 0 and minPrice == 0 ) ): condition_rang = True
+    #balance check
+    if(market.balance()[symbolSplit[0]]['available'] < (amtSize()*ask) and sys_realTrade == True ):
+        condition_balance = True
+    else:
+        condition_balance = False
+        print('Not enough money.')
+         
+    #-----SumCondition-----
     if(sys_openOder == True
-    and condition2 == True):conditions = True
+    and condition_rang == True):conditions = True
     return conditions
+
+#///////////////////////////////////////////////////////////////////
 
     #Msg Line
 def lineSendMas(msg_line):
@@ -422,12 +438,12 @@ def main():
                     posList[i]['closeTime'] = res["ts"]
                     posList[i]['profit'] =  res["rec"] - posList[i]['size']
 
-                    msgComment     =   posList[i]['comment']
-                    msgSize         =  posList[i]['size']
+                    msgComment    =   posList[i]['comment']
+                    msgSize       =  res["rec"] 
                     msgPrice      =   round(posList[i]['closePrice'],printDecimal)
-                    msgRecive      =   round(posList[i]["profit"],printDecimal)
-                    msgTm          =   posList[i]['closeTime']
-                    msgType      =   posList[i]['type']
+                    msgRecive     =   round(posList[i]["profit"],printDecimal)
+                    msgTm         =   posList[i]['closeTime']
+                    msgType       =   posList[i]['type']
 
                     if(msgType == 'buy'):
                         msgType = 'sell'
@@ -438,8 +454,8 @@ def main():
                     acc.update_db({'positions':'openPositions'},posList[i])
                     acc.order_in(msgSize,msgRecive)
                     #sent log
-                    lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[1]} @ {msgPrice} \r\n profit: {msgRecive} {symbolSplit[0]} ') 
-                    print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[1]} @ {msgPrice} profit: {msgRecive} {symbolSplit[0]} {msgTm}',end="\r")
+                    lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[1]} @ {msgPrice} \r\nprofit {msgRecive} {symbolSplit[0]} ') 
+                    print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[1]} @ {msgPrice} profit {msgRecive} {symbolSplit[0]} {msgTm}',end="\r")
                     print('')
                 
                     #update arr
@@ -452,11 +468,6 @@ def main():
         #-----openOrder
         if(openOrder):
             #------ balance check ------
-            '''
-            if(market.balance()[symbolSplit[0]]['available'] < (size()*ask) and sys_realTrade == True ):
-                openorder = False
-                print('not enough margin!')
-            ''' 
             #รับค่าที่ได้จาก condition ชุดคำสั่ง Buy 
             orderType = 'buy'
             res = OrderSend(symbol,orderType,amtSize(),ask,'market')
@@ -489,8 +500,8 @@ def main():
                 acc.save_db(posList[-1])
                 acc.order_out(msgSize)
                 #sent log
-                lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[0]} @ {msgPrice} \r\n recive: {msgRecive} {symbolSplit[1]} ') 
-                print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[0]} @ {msgPrice} recive: {msgRecive} {symbolSplit[1]} {msgTm}',end="\r")
+                lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[0]} @ {msgPrice} \r\nrecive {msgRecive} {symbolSplit[1]} ') 
+                print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[0]} @ {msgPrice} recive {msgRecive} {symbolSplit[1]} {msgTm}',end="\r")
                 print('')
 
             else:
@@ -500,7 +511,7 @@ def main():
         #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
         #ใช้กับ CMD
         
-    print(f'BID:{bid} ASK:{ask} {date_time}     ',end="\r")
+    print(f'BID:{round(bid,printDecimal)} ASK:{round(ask,printDecimal)} {date_time}     ',end="\r")
 
 
 
