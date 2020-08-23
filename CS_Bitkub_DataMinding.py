@@ -186,13 +186,13 @@ class  accountManagement:
         if(res == True):
             print('Update account failure.')
     
-    def Order_in(self,value,profit):
+    def order_in(self,value,profit):
         self.account['equity'] = self.account['equity'] + value + profit
         self.account['out'] = self.account['out'] -  value
         self.account['p/l'] = self.account['p/l'] +  profit
         self.update_account()
         
-    def Order_out(self,value):
+    def order_out(self,value):
         self.account['equity'] - value
         self.account['out'] + value
         self.update_account()
@@ -435,7 +435,7 @@ def main():
 
                     #update history
                     acc.update_db({'positions':'openPositions'},posList[i])
-                    acc.Order_in(msgSize,msgRecive)
+                    acc.order_in(msgSize,msgRecive)
                     #sent log
                     lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[1]} @ {msgPrice} \r\n profit: {msgRecive} {symbolSplit[0]} ') 
                     print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[1]} @ {msgPrice} profit: {msgRecive} {symbolSplit[0]} {msgTm}',end="\r")
@@ -486,7 +486,7 @@ def main():
                 posList.append(Order)
                 #save trade
                 acc.save_db(posList[-1])
-                acc.Order_out(msgSize)
+                acc.order_out(msgSize)
                 #sent log
                 lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[0]} @ {msgPrice} \r\n recive: {msgRecive} {symbolSplit[1]} ') 
                 print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[0]} @ {msgPrice} recive: {msgRecive} {symbolSplit[1]} {msgTm}',end="\r")
