@@ -71,10 +71,10 @@ def initialization():
     posList=[]
     #---------ClearOrder-------
     if(clearOrder):
-        acc.clear_db('bitkub_trade',{'positions':'openPositions'})
+        acc.clear_db({'positions':'openPositions'})
         print("-clearOrder")
     if(clearHistory):
-        acc.clear_db('bitkub_trade',{'positions':'closePositions'})
+        acc.clear_db({'positions':'closePositions'})
         print("-clearHistory")
     #---------loadOrder-------
     if(True):
@@ -145,6 +145,7 @@ class  accountManagement:
     def __init__(self):
         self._client=MongoClient("mongodb+srv://wasan:1234@cluster0.ujivx.gcp.mongodb.net/trading_db?retryWrites=true&w=majority")
         self._db=self._client.get_database('trading_db')   
+        self._collection = 'bitkub_trade'
         self.account = { 
                     'account':'',
                     'initialize':0.0, 
@@ -181,7 +182,7 @@ class  accountManagement:
                 print('load account failure.')
 
     #updateข้อมูล สถานะ เงินทุน กำไร etc   
-    def update_account(self):
+    def _update_account(self):
         res = self._db.summary.update_one({'account':'bitkub-dataMinding'}, { "$set":  self.account  })
         if(res == True):
             print('Update account failure.')
@@ -190,41 +191,41 @@ class  accountManagement:
         self.account['equity'] = self.account['equity'] + value + profit
         self.account['out'] = self.account['out'] -  value
         self.account['p/l'] = self.account['p/l'] +  profit
-        self.update_account()
+        self._update_account()
         
     def order_out(self,value):
         self.account['equity'] - value
         self.account['out'] + value
-        self.update_account()
+        self._update_account()
     
     ####################### ส่วนการเทรด #############################
     
     #โหลดข้อมูลส่วน array ซึ่งจะเก็บสถานะไม้ CS ที่เปิดค้างไว้อยู่
     def load_order(self):
-        if (self._db.bitkub_trade.count_documents({'positions':'openPositions'}))==0:
+        if (self._db[self._collection].count_documents({'positions':'openPositions'}))==0:
             arr=[]
         else:
             arr=[]
-            for data in self._db.bitkub_trade.find({'positions':'openPositions'}):
+            for data in self._db[self._collection].find({'positions':'openPositions'}):
                 arr.append(data)
         return arr
 
     #บันทึกlog ในการยิงคำสั่งแต่ละครัง
     def save_db(self,arr):
-        res = self._db.bitkub_trade.insert_one(arr)
+        res = self._db[self._collection].insert_one(arr)
         return res
 
     def update_db(self,query,values):
-        res = self._db.bitkub_trade.update_one(query, { "$set": values })
+        res = self._db[self._collection].update_one(query, { "$set": values })
         return res
 
     #----clear worksheet
-    def clear_db(self,collection,target):
-        self._db[collection].delete_many(target)
+    def clear_db(self,target):
+        self._db[self._collection].delete_many(target)
 
         
-    def findID(self,collection,ID):
-        return print(self._db[collection].find_one({"_id": ID}))
+    def findID(self,ID):
+        return print(self._db[self._collection].find_one({"_id": ID}))
 
 
 class marketAPI:
@@ -390,11 +391,11 @@ def OrderClose(order):
         #res = trade.testPlaceOrder(order['symbol'],orderType,lot,price,'market')
         res = { "id":"Test", 
                 'hash':'Test', 
-                'amt': order['size'], 
+                'amt': order['recive'], 
                 'rat':price, 
                 "fee": makeFees, 
                 "cre": 0,
-                'rec':(order['size']*price)*(1-fee),
+                'rec':(order['recive']*price)*(1-fee),
                 "ts": date_time }           
     return res
 
