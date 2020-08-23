@@ -499,7 +499,7 @@ def main():
         #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
         #ใช้กับ CMD
         
-    print(f'BID:{bid} ASK:{ask} {date_time}',end="\r")
+    print(f'BID:{bid} ASK:{ask} {date_time}     ',end="\r")
 
 
 
