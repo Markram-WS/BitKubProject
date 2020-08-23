@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 import time
 import requests 
 import hmac
@@ -48,9 +48,9 @@ def initialization():
     system = True #While loop
     sys_realTrade = False
     sys_openOder = True
-    clearOrder = True
-    clearHistory = True
-    setAccount = True
+    clearOrder = False
+    clearHistory = False
+    setAccount = False
     
     #--------------------------SymbolsInfo-----------------------------
     SymbolsInfo = market.getSymbolsInfo()
@@ -95,6 +95,7 @@ def initialization():
         acc.load_account()
         
     print("----------- start -----------")
+
 
 #ปรับ vol. ในการส่งคำสั่ง
 def amtSize():
@@ -487,8 +488,8 @@ def main():
                 acc.save_db(posList[-1])
                 acc.Order_out(msgSize)
                 #sent log
-                lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[1]} @ {msgPrice} \r\n recive: {msgRecive} {symbolSplit[0]} ') 
-                print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[1]} @ {msgPrice} recive: {msgRecive} {symbolSplit[0]} {msgTm}',end="\r")
+                lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[0]} @ {msgPrice} \r\n recive: {msgRecive} {symbolSplit[1]} ') 
+                print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[0]} @ {msgPrice} recive: {msgRecive} {symbolSplit[1]} {msgTm}',end="\r")
                 print('')
 
             else:
@@ -497,7 +498,9 @@ def main():
         #ใช้กับ google Code
         #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
         #ใช้กับ CMD
-        print(f'BID:{bid} ASK:{ask} {date_time}',end="\r")
+        
+    print(f'BID:{bid} ASK:{ask} {date_time}     ',end="\r")
+
 
 
 initialization()
