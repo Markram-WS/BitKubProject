@@ -439,7 +439,7 @@ def main():
                     posList[i]['profit'] =  res["rec"] - posList[i]['size']
 
                     msgComment    =   posList[i]['comment']
-                    msgSize       =  res["rec"] 
+                    msgSize       =   posList[i]["recive"]
                     msgPrice      =   round(posList[i]['closePrice'],printDecimal)
                     msgRecive     =   round(posList[i]["profit"],printDecimal)
                     msgTm         =   posList[i]['closeTime']
