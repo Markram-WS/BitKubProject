@@ -110,7 +110,6 @@ def closeOrder():
     # %2 focus จำนวณที่ 2 หารลงตัว
     #-----initialize-----
     condition_price     =   False
-
     conditions  =   False
     #-----condition-----
     #price check
@@ -148,12 +147,14 @@ def openOrder():
 
 #///////////////////////////////////////////////////////////////////
 
-    #Msg Line
+#Msg Line
 def lineSendMas(msg_line):
     url_line = 'https://notify-api.line.me/api/notify'
     token_line = 'QHQPbxDrgD35meR5LDh0PniRVDGYUBNrH8ls42ThiKM'
     headers_line = {'content-type':'application/x-www-form-urlencoded','Authorization':'Bearer '+token_line}
     requests.post(url_line, headers=headers_line , data = {'message':msg_line})
+
+#////////////////////////////////////////////////////////////////////
 
 #สร้าง class Account : class นี้จะจัดการงานเกี่ยวกับบัญชีเก็บ log จัดการงานทัวไป
 class  accountManagement: 
@@ -244,6 +245,8 @@ class  accountManagement:
         return print(self._db[self._collection].find_one({"_id": ID}))
 
 
+#//////////////////////////////////////////////////////////////////////////
+
 class marketAPI:
     #API sub function
     def _json_encode(self,data):
@@ -295,6 +298,7 @@ class marketAPI:
         }
         return self._post('/api/market/balances',data)
 
+#//////////////////////////////////////////////////////////////////////////
 
 class  tradeAPI:
       #API sub function
@@ -370,6 +374,7 @@ class  tradeAPI:
             print('cannot place orders                          ')
             return False
 
+#/////////////////////////////////////////////////////////////////////////
 
 #---------------------------sent order FUNCTION ---------------------------
 #function ยิง order 
@@ -415,20 +420,26 @@ def OrderClose(order):
                 "ts": date_time }           
     return res
 
+#//////////////////////////////////////////////////////////////////////////////////////
+
 def main():
     global bid,ask,date_time
     priceZone=0 #set zone zero
     tm = datetime.now()
     date_time = tm.strftime('%Y-%m-%d %H:%M:%S')
     #[0]orderId [1]timestamp [2]volume [3]rate [4]amount
+    
     bid = market.getBids(symbol)[0][3]
     ask = market.getAsks(symbol)[0][3]
-    priceZone = ((ask/priceTick)//1)*priceTick
+    priceZone =  round(((ask/priceTick)//1)*priceTick ,printDecimal)
+
+    #Time action
     if(ask != False and tm.hour != acc.account['tmZone']):
         acc.account['tmZone'] = tm.hour
 
-        if(closeOrder and len(posList)>0):
-            for i in range(len(posList)):
+      
+        for i in range(len(posList)):
+            if(closeOrder() == True):
                 res = OrderClose(posList[i])
                 if(res != False):
                     #add Close Order ใน list 
@@ -439,7 +450,7 @@ def main():
                     posList[i]['profit'] =  res["rec"] - posList[i]['size']
 
                     msgComment    =   posList[i]['comment']
-                    msgSize       =   posList[i]["recive"]
+                    msgSize       =   round(posList[i]["recive"],printDecimal)
                     msgPrice      =   round(posList[i]['closePrice'],printDecimal)
                     msgRecive     =   round(posList[i]["profit"],printDecimal)
                     msgTm         =   posList[i]['closeTime']
@@ -460,13 +471,12 @@ def main():
                 
                     #update arr
                     del posList[i]
-                    
                 else:
                     print('error: close order')
   
  
         #-----openOrder
-        if(openOrder):
+        if(openOrder() == True):
             #------ balance check ------
             #รับค่าที่ได้จาก condition ชุดคำสั่ง Buy 
             orderType = 'buy'
@@ -490,7 +500,7 @@ def main():
                 }
                 msgType = Order['type']
                 msgComment = Order['comment']
-                msgSize    = Order['size']
+                msgSize    = round(Order['size'],printDecimal)
                 msgPrice  = round(Order['openPrice'],printDecimal)
                 msgRecive  = round(Order["recive"],printDecimal)
                 msgTm      = Order["openTime"]
@@ -510,10 +520,12 @@ def main():
         #ใช้กับ google Code
         #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
         #ใช้กับ CMD
-        
-    print(f'BID:{round(bid,printDecimal)} ASK:{round(ask,printDecimal)} {date_time}     ',end="\r")
+    if(ask != False):   
+        print(f'BID:{round(bid,printDecimal)} ASK:{round(ask,printDecimal)} {date_time}     ',end="\r")
+    else:
+        print(f'Error,plese check connection.                                               ',end="\r")
 
-
+#//////////////////////////////////////////////////////////////////////
 
 initialization()
 while(system):

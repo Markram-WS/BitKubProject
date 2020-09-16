@@ -1,3 +1,4 @@
+from datetime import datetime
 import time
 import requests 
 import hmac
@@ -19,7 +20,6 @@ header = {
     'X-BTK-APIKEY': API_KEY,
 }
 
-
 #///////////////////////////////////////////////////////////////////
 
 def initialization():  
@@ -29,26 +29,29 @@ def initialization():
     acc = accountManagement()
     trade = tradeAPI()
     #--------------------------variable-----------------------------
+    acc.account['account']='bitkub-dataMinding'
     #ProductSetting
     global symbol, symbolSplit
     symbol = 'THB_XRP'  # THB_XRP
     symbolSplit =  symbol.split("_")
+
     #Grid
     global maxPrice,minPrice,priceTick,delta,printDecimal,makeFees,takeFees
     makeFees= 0.0025#0.25%
     takeFees= 0.0025#0.25%
     maxPrice = 0
     minPrice = 0
-    priceTick = 0.05
+    priceTick = 0.01
     delta  = 0.05
     printDecimal = 3
     #SystemSetitng
-    global system,realTrade
+    global system,sys_realTrade,sys_openOder
     system = True #While loop
-    realTrade = False
+    sys_realTrade = False
+    sys_openOder = True
     clearOrder = False
     clearHistory = False
-    setPort = False
+    setAccount = False
     
     #--------------------------SymbolsInfo-----------------------------
     SymbolsInfo = market.getSymbolsInfo()
@@ -62,51 +65,88 @@ def initialization():
     print(f"delta {delta}")   
     print(f"range [{minPrice} - {maxPrice}]")   
     print(f"priceTick {priceTick}")   
-    print(f"RealTrade {realTrade}")
+    print(f"RealTrade {sys_realTrade}")
             
     #--------------------------Array  initialization-----------------------------  
     global posList
     posList=[]
-    #---------Clear-------
+    #---------ClearOrder-------
     if(clearOrder):
-        acc.clear_db('bitkub_trade')
+        acc.clear_db({'positions':'openPositions'})
         print("-clearOrder")
     if(clearHistory):
-        acc.clear_db('bitkub_history')
+        acc.clear_db({'positions':'closePositions'})
         print("-clearHistory")
-    #---------load_order-------
+    #---------loadOrder-------
     if(True):
         posList = acc.load_order()
         print("-loadOrder")
-    #---------Setport-------  
-    port = { 'initialize': 0.0, 
-                  'equity': 0.0, 
-                  'in': 0.0, 
-                  'out': 0.0, 
-                  'p/l': 0.0
-                  }
-    if(setPort):
-        acc.save_port(port)
+    #---------SetAccount-------  
+    if(setAccount):
         print("-setPort")
+        acc.account['initialize']=8000
+        acc.account['equity']=8000
+        acc.account['out']=0
+        acc.account['p/l']=0
+        acc.account['tmZone']=0
+        acc.account['comment']=0
+        acc.set_account()
+    #---------loadAccount-------
+    if(True):
+        acc.load_account()
+        
     print("----------- start -----------")
-    
-#----------------------------------------------------------------------------
+
+#///////////////////////////////////////////////////////////////////
+
 #ปรับ vol. ในการส่งคำสั่ง
 def amtSize():
-    lot = 10.0
+    lot = 20.0
     return lot 
 
 #กำหนดฟังก์ชั่นในการส่วคำสั่ง
-def tradeFunction():
+def closeOrder():
     # ask//priceTick ทำให้ทศนิยม priceTick ตำแหน่งกลายเป็นจำนวณเต็ม
     # %2 focus จำนวณที่ 2 หารลงตัว
-    condition1 = False
-    conditions = False
-    if(((ask/priceTick)/1)%2.0 == 0.0): condition1 = True
-    if(condition1 == True):conditions = True
+    #-----initialize-----
+    condition_price     =   False
+    conditions  =   False
+    #-----condition-----
+    #price check
+    if(((ask/priceTick)/1)%5.0 == 0.0): condition_price = True
+         
+    #-----SumCondition-----
+    if(True):conditions = True
+    return conditions
+
+def openOrder():
+    # ask//priceTick ทำให้ทศนิยม priceTick ตำแหน่งกลายเป็นจำนวณเต็ม
+    # %2 focus จำนวณที่ 2 หารลงตัว
+    #-----initialize-----
+    condition_price     =   False
+    condition_rang      =   False
+    condition_balance   =   False
+
+    conditions  =   False
+    #-----condition-----
+    #price check
+    if(((ask/priceTick)/1)%5.0 == 0.0): condition_price = True
+    #rang check
+    if( (ask <= maxPrice and ask >= minPrice ) or ( maxPrice == 0 and minPrice == 0 ) ): condition_rang = True
+    #balance check
+    if(market.balance()[symbolSplit[0]]['available'] < (amtSize()*ask) and sys_realTrade == True ):
+        condition_balance = True
+    else:
+        condition_balance = False
+        print('Not enough money.')
+         
+    #-----SumCondition-----
+    if(sys_openOder == True
+    and condition_rang == True):conditions = True
     return conditions
 
 #///////////////////////////////////////////////////////////////////
+
 #Msg Line
 def lineSendMas(msg_line):
     url_line = 'https://notify-api.line.me/api/notify'
@@ -114,63 +154,99 @@ def lineSendMas(msg_line):
     headers_line = {'content-type':'application/x-www-form-urlencoded','Authorization':'Bearer '+token_line}
     requests.post(url_line, headers=headers_line , data = {'message':msg_line})
 
-#///////////////////////////////////////////////////////////////////
+#////////////////////////////////////////////////////////////////////
+
 #สร้าง class Account : class นี้จะจัดการงานเกี่ยวกับบัญชีเก็บ log จัดการงานทัวไป
 class  accountManagement: 
    #สร้างตัวแปรที่จำเป็นต้องใช้
     def __init__(self):
         self._client=MongoClient("mongodb+srv://wasan:1234@cluster0.ujivx.gcp.mongodb.net/trading_db?retryWrites=true&w=majority")
         self._db=self._client.get_database('trading_db')   
-        self.port = { 'initialize': 0.0, 
-                  'equity': 0.0, 
-                  'in': 0.0, 
-                  'out': 0.0, 
-                  'p/l': 0.0
+        self._collection = 'bitkub_trade'
+        self.account = { 
+                    'account':'',
+                    'initialize':0.0, 
+                    'equity': 0.0, 
+                    'out': 0.0, 
+                    'p/l': 0.0,
+                    'tmZone':0,
+                    'comment':0,
                   }
+    ####################### ส่วนAccount #############################
+    #updateข้อมูล สถานะ เงินทุน กำไร etc   
+    def set_account(self):
+        if (self._db.summary.count_documents({'account':self.account['account']})!= 0):
+            self._db.summary.delete_many({'account':self.account['account']})
+        res = self._db.summary.insert_one(self.account)
+        if(res != False):
+            print('set account success.')
+        else:
+            print('set account failure.')
   
-    #------Real-----
+            
+
     #ดึงข้อมูล สถานะ เงินทุน กำไร etc   
-    def load_port(self,port):
-        print("#") 
+    def load_account(self):        
+        if (self._db.summary.count_documents({'account':self.account['account']})==0):
+            print('Empty account.')
+            arr=[]
+        else:
+            arr = self._db.summary.find_one({'account':self.account['account']})
+            if(arr != False):
+                self.account = arr
+                print('load account success.')
+            else:
+                print('load account failure.')
 
-    #บันทึกข้อมูล สถานะ เงินทุน กำไร etc   
-    def save_port(self,port):
-        print("#") 
-
-    #ส่วนการเทรด
+    #updateข้อมูล สถานะ เงินทุน กำไร etc   
+    def _update_account(self):
+        res = self._db.summary.update_one({'account':'bitkub-dataMinding'}, { "$set":  self.account  })
+        if(res == True):
+            print('Update account failure.')
+    
+    def order_in(self,value,profit):
+        self.account['equity'] = self.account['equity'] + value + profit
+        self.account['out'] = self.account['out'] -  value
+        self.account['p/l'] = self.account['p/l'] +  profit
+        self._update_account()
+        
+    def order_out(self,value):
+        self.account['equity'] - value
+        self.account['out'] + value
+        self._update_account()
+    
+    ####################### ส่วนการเทรด #############################
+    
     #โหลดข้อมูลส่วน array ซึ่งจะเก็บสถานะไม้ CS ที่เปิดค้างไว้อยู่
     def load_order(self):
-        if (self._db.bitkub_trade.count_documents({}))==0:
+        if (self._db[self._collection].count_documents({'positions':'openPositions'}))==0:
             arr=[]
         else:
             arr=[]
-            for data in self._db.bitkub_trade.find({}):
+            for data in self._db[self._collection].find({'positions':'openPositions'}):
                 arr.append(data)
         return arr
 
-    #บันทึกข้อมูลส่วน array ซึ่งจะเก็บสถานะไม้ CS ที่เปิดค้างไว้อยู่
-    def save_order(self,arr):
-        self.clear_db('bitkub_trade')
-        if(len(arr) != 0):
-            res = self._db.bitkub_trade.insert_many(arr)
-            return res
-        else: 
-            res = 'empty array'
-
     #บันทึกlog ในการยิงคำสั่งแต่ละครัง
-    def save_log(self,arr):
-        res = self._db.bitkub_history.insert_one(arr)
+    def save_db(self,arr):
+        res = self._db[self._collection].insert_one(arr)
+        return res
+
+    def update_db(self,query,values):
+        res = self._db[self._collection].update_one(query, { "$set": values })
         return res
 
     #----clear worksheet
-    def clear_db(self,collection):
-        self._db[collection].delete_many({})
+    def clear_db(self,target):
+        self._db[self._collection].delete_many(target)
 
         
-    def findID(self,collection,ID):
-        return print(self._db[collection].find_one({"_id": ID}))
+    def findID(self,ID):
+        return print(self._db[self._collection].find_one({"_id": ID}))
 
-#///////////////////////////////////////////////////////////////////
+
+#//////////////////////////////////////////////////////////////////////////
+
 class marketAPI:
     #API sub function
     def _json_encode(self,data):
@@ -221,8 +297,9 @@ class marketAPI:
             'ts': self.getServerTime(),
         }
         return self._post('/api/market/balances',data)
-#///////////////////////////////////////////////////////////////////
-#สร้าง class Trad : class นี้จะจัดการงานเกี่ยวกับการเทรดทั้งหมด
+
+#//////////////////////////////////////////////////////////////////////////
+
 class  tradeAPI:
       #API sub function
     def _json_encode(self,data):
@@ -296,16 +373,18 @@ class  tradeAPI:
         else:
             print('cannot place orders                          ')
             return False
-#///////////////////////////////////////////////////////////////////
+
+#/////////////////////////////////////////////////////////////////////////
+
 #---------------------------sent order FUNCTION ---------------------------
 #function ยิง order 
 def OrderSend(market,orderType,amt,price,mktType):
-    if(realTrade == True):
+    if(sys_realTrade == True):
         #ยิง order และรับค่าที่ return มา ถ้ายิงจริงจะมาปรับปรุงส่วนนี้เพิ่มเติม
         res = trade.placeOrder(market,orderType,amt,price,'market')
 
     else:
-        #res = trade.testPlaceOrder(market,orderType,amtSize(),price,'market')
+        #res = trade.testPlaceOrder(market,orderType,lot,price,'market')
         res = { "id":"Test", 
                 'hash':'Test', 
                 'amt': amt, 
@@ -321,136 +400,134 @@ def OrderClose(order):
     if(order['type']=='buy'):
         orderType = 'sell'
         price = bid
-        fee = makeFees
+        fee = takeFees
     else:
         orderType = 'buy'
         price = ask
-        fee = takeFees
+        fee = makeFees
 
-    if(realTrade == True):
+    if(sys_realTrade == True):
         res = trade.placeOrder(order['symbol'],orderType,order['size'],price,'market')
     else:
-        #res = trade.testPlaceOrder(order['symbol'],orderType,amt,price,'market')
+        #res = trade.testPlaceOrder(order['symbol'],orderType,lot,price,'market')
         res = { "id":"Test", 
                 'hash':'Test', 
-                'amt': order['size'], 
+                'amt': order['recive'], 
                 'rat':price, 
-                "fee": fee, 
+                "fee": makeFees, 
                 "cre": 0,
+                'rec':(order['recive']*price)*(1-fee),
                 "ts": date_time }           
     return res
-#///////////////////////////////////////////////////////////////////
+
+#//////////////////////////////////////////////////////////////////////////////////////
+
 def main():
     global bid,ask,date_time
-    zone=0 #set zone zero
-    date_time = time.strftime('%Y-%m-%d %H:%M:%S')
+    priceZone=0 #set zone zero
+    tm = datetime.now()
+    date_time = tm.strftime('%Y-%m-%d %H:%M:%S')
     #[0]orderId [1]timestamp [2]volume [3]rate [4]amount
-    
     
     bid = market.getBids(symbol)[0][3]
     ask = market.getAsks(symbol)[0][3]
+    priceZone =  round(((ask/priceTick)//1)*priceTick ,printDecimal)
 
-    if(ask != False):
-        if(tradeFunction() == True):
-            zone = ((ask/priceTick)//1)*priceTick
-            #----condition----
-            #set ตัวแปรเริ่มต้น
-            openOrder = True
-            for i in range(len(posList)):
-                #เมื่อโซนปัจจุบันไม่มีบันทึกใน array จะยิง buy order 
-                if(zone == float(posList[i]['comment']) ): openOrder = False
-                #เมื่อโซนก่อนหน้านี้มีระยะ = delta ใน array จะยิง sell order    
-                if(zone > float(posList[i]['comment'])  + delta):
-                    #รับค่าที่ได้จาก fn
-                    res = OrderClose(posList[i])
-                    #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
-                    if(res != False):
-                        #add createOrder ใน list 
-                        posList[i]['closeHash'] = res["hash"]
-                        posList[i]['closePrice'] = res["rat"]
-                        posList[i]['closeTime'] = res["ts"]
-                        posList[i]['profit'] = ( posList[i]['size'] /res["rat"]*(1-takeFees) ) -  posList[i]['recive']
+    #Time action
+    if(ask != False and tm.hour != acc.account['tmZone']):
+        acc.account['tmZone'] = tm.hour
 
-                        comment     =   posList[i]['comment']
-                        size         =  posList[i]['size']
-                        cPrice      =   round(posList[i]['closePrice'],printDecimal)
-                        recive      =   round(posList[i]["profit"],printDecimal)
-                        tm          =   posList[i]['closeTime']
-                        posType      =   posList[i]['type']
-
-                        if(posType == 'buy'):
-                            posType = 'sell'
-                        else:
-                            posType = 'buy'
-
-                        #update history
-                        acc.save_log(posList[i])
-                    
-                        #sent log
-                        lineSendMas(f'{posType} {symbol} {comment} \r\n{size}@{cPrice} recive:{recive} ') 
-                        print(f'{posType}:{symbol} zone:{comment} {size}@{cPrice} recive:{recive} {tm}',end="\r")
-                        print('')
-                    
-                        #update arr
-                        del posList[i]
-                        
-                        #save trade
-                        acc.save_order(posList)
-                        break
-            #end for i 
-            #        
-            #-----openOrder
-            if(openOrder == True
-            and ((ask<maxPrice and ask>minPrice) or  (minPrice ==0 and minPrice ==0))):
-                #------ balance check ------
-                '''
-                if(market.balance()[symbolSplit[0]]['available'] < (size()*ask) and realTrade == True ):
-                    openorder = False
-                    print('not enough margin!')
-                ''' 
-                #รับค่าที่ได้จาก condition ชุดคำสั่ง Buy 
-                orderType = 'buy'
-                res = OrderSend(symbol,orderType,amtSize(),ask,'market')
-                #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
+      
+        for i in range(len(posList)):
+            if(closeOrder() == True):
+                res = OrderClose(posList[i])
                 if(res != False):
-                    Order  = {
-                        'symbol':symbol,
-                        'type':orderType,
-                        'size':res["amt"],
-                        'openHash':res["hash"],
-                        'openPrice':res["rat"],
-                        'openTime':res["ts"],
-                        'recive':res["amt"]/res["rat"]*(1-makeFees),
-                        'closeHash':'',
-                        'closePrice':0,
-                        'closeTime':0,
-                        'profit':0,
-                        'comment':f'{zone}'
-                    }
-                    posType = Order['type']
-                    comment = Order['comment']
-                    size    = Order['size']
-                    oPrice  = round(Order['openPrice'],printDecimal)
-                    recive  = round(Order["recive"],printDecimal)
-                    tm      = Order["openTime"]
-                    #add createOrder ใน list 
-                    posList.append(Order)
-                    #save trade
-                    acc.save_order(posList)
+                    #add Close Order ใน list 
+                    posList[i]['positions'] = 'closePositions'
+                    posList[i]['closeHash'] = res["hash"]
+                    posList[i]['closePrice'] = res["rat"]
+                    posList[i]['closeTime'] = res["ts"]
+                    posList[i]['profit'] =  res["rec"] - posList[i]['size']
+
+                    msgComment    =   posList[i]['comment']
+                    msgSize       =   round(posList[i]["recive"],printDecimal)
+                    msgPrice      =   round(posList[i]['closePrice'],printDecimal)
+                    msgRecive     =   round(posList[i]["profit"],printDecimal)
+                    msgTm         =   posList[i]['closeTime']
+                    msgType       =   posList[i]['type']
+
+                    if(msgType == 'buy'):
+                        msgType = 'sell'
+                    else:
+                        msgType = 'buy'
+
+                    #update history
+                    acc.update_db({'positions':'openPositions'},posList[i])
+                    acc.order_in(msgSize,msgRecive)
                     #sent log
-                    lineSendMas(f'{posType} {symbol} {comment} \r\n{size}@{oPrice} recive:{recive} ') 
-                    print(f'{posType}:{symbol} zone:{comment} {size}@{oPrice} recive:{recive} {tm}',end="\r")
+                    lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[1]} @ {msgPrice} \r\nprofit {msgRecive} {symbolSplit[0]} ') 
+                    print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[1]} @ {msgPrice} profit {msgRecive} {symbolSplit[0]} {msgTm}',end="\r")
                     print('')
-                    
+                
+                    #update arr
+                    del posList[i]
+                else:
+                    print('error: close order')
+  
+ 
+        #-----openOrder
+        if(openOrder() == True):
+            #------ balance check ------
+            #รับค่าที่ได้จาก condition ชุดคำสั่ง Buy 
+            orderType = 'buy'
+            res = OrderSend(symbol,orderType,amtSize(),ask,'market')
+            #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
+            if(res != False):
+                Order  = {
+                    'positions':'openPositions',
+                    'symbol':symbol,
+                    'type':orderType,
+                    'size':res["amt"],
+                    'openHash':res["hash"],
+                    'openPrice':res["rat"],
+                    'openTime':res["ts"],
+                    'recive':res["rec"],
+                    'closeHash':'',
+                    'closePrice':0,
+                    'closeTime':0,
+                    'profit':0,
+                    'comment':f'{priceZone}'
+                }
+                msgType = Order['type']
+                msgComment = Order['comment']
+                msgSize    = round(Order['size'],printDecimal)
+                msgPrice  = round(Order['openPrice'],printDecimal)
+                msgRecive  = round(Order["recive"],printDecimal)
+                msgTm      = Order["openTime"]
+                #add createOrder ใน list 
+                posList.append(Order)
+                #save trade
+                acc.save_db(posList[-1])
+                acc.order_out(msgSize)
+                #sent log
+                lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[0]} @ {msgPrice} \r\nrecive {msgRecive} {symbolSplit[1]} ') 
+                print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[0]} @ {msgPrice} recive {msgRecive} {symbolSplit[1]} {msgTm}',end="\r")
+                print('')
+
+            else:
+                print('error: close order')        
 
         #ใช้กับ google Code
         #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
         #ใช้กับ CMD
-        print(f'BID:{bid} ASK:{ask} {date_time}',end="\r")
+    if(ask != False):   
+        print(f'BID:{round(bid,printDecimal)} ASK:{round(ask,printDecimal)} {date_time}     ',end="\r")
+    else:
+        print(f'Error,plese check connection.                                               ',end="\r")
 
+#//////////////////////////////////////////////////////////////////////
 
-#///////////////////////////////////////////////////////////////////
 initialization()
 while(system):
     main()
-    time.sleep(1)  
+    time.sleep(1)
