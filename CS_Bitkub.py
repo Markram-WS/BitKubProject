@@ -29,7 +29,8 @@ def initialization():
     acc = accountManagement()
     trade = tradeAPI()
     #--------------------------variable-----------------------------
-    acc.account['account']='bitkub-dataMinding'
+    acc.account['account']='bitkub_xrp'
+    acc._collection='bitkub_xrp'
     #ProductSetting
     global symbol, symbolSplit
     symbol = 'THB_XRP'  # THB_XRP
@@ -47,11 +48,11 @@ def initialization():
     #SystemSetitng
     global system,sys_realTrade,sys_openOder
     system = True #While loop
-    sys_realTrade = False
+    sys_realTrade = True
     sys_openOder = True
     clearOrder = False
     clearHistory = False
-    setAccount = False
+    setAccount = True
     
     #--------------------------SymbolsInfo-----------------------------
     SymbolsInfo = market.getSymbolsInfo()
@@ -68,7 +69,9 @@ def initialization():
     print(f"RealTrade {sys_realTrade}")
             
     #--------------------------Array  initialization-----------------------------  
-    global posList
+    global posList,priceList
+    priceList=list(range(1,101))
+    priceList=[round((i * 0.05)*4.6619, 2) for i in priceList]
     posList=[]
     #---------ClearOrder-------
     if(clearOrder):
@@ -84,8 +87,8 @@ def initialization():
     #---------SetAccount-------  
     if(setAccount):
         print("-setPort")
-        acc.account['initialize']=8000
-        acc.account['equity']=8000
+        acc.account['initialize']=500
+        acc.account['equity']=500
         acc.account['out']=0
         acc.account['p/l']=0
         acc.account['tmZone']=0
@@ -100,23 +103,28 @@ def initialization():
 #///////////////////////////////////////////////////////////////////
 
 #ปรับ vol. ในการส่งคำสั่ง
-def amtSize():
-    lot = 20.0
-    return lot 
+def amtSize(side,price):
+    if side == "sell":#sell THB
+        lot = 10
+    elif side == "buy":#buy THB
+        lot = round((10/price)+0.00001,5)
+    return  lot
 
 #กำหนดฟังก์ชั่นในการส่วคำสั่ง
-def closeOrder():
+def closeOrder(pos):
     # ask//priceTick ทำให้ทศนิยม priceTick ตำแหน่งกลายเป็นจำนวณเต็ม
     # %2 focus จำนวณที่ 2 หารลงตัว
     #-----initialize-----
     condition_price     =   False
+    condition1 = False
     conditions  =   False
     #-----condition-----
     #price check
-    if(((ask/priceTick)/1)%5.0 == 0.0): condition_price = True
-         
+    if(((ask/priceTick)/1)%1.0 == 0.0): condition_price = True
+    if(ask in priceList and pos['openPrice'] != ask and (ask - pos['openPrice']) > 0): condition1 = True
     #-----SumCondition-----
-    if(True):conditions = True
+    if(condition_price
+    and condition1):conditions = True
     return conditions
 
 def openOrder():
@@ -125,23 +133,25 @@ def openOrder():
     #-----initialize-----
     condition_price     =   False
     condition_rang      =   False
-    condition_balance   =   False
+    condition1 = False
+    orderDuplicate = False
 
     conditions  =   False
     #-----condition-----
     #price check
-    if(((ask/priceTick)/1)%5.0 == 0.0): condition_price = True
+    if(((ask/priceTick)/1)%1.0 == 0.0): condition_price = True
     #rang check
     if( (ask <= maxPrice and ask >= minPrice ) or ( maxPrice == 0 and minPrice == 0 ) ): condition_rang = True
-    #balance check
-    if(market.balance()[symbolSplit[0]]['available'] < (amtSize()*ask) and sys_realTrade == True ):
-        condition_balance = True
-    else:
-        condition_balance = False
-        print('Not enough money.')
          
+    if(ask in priceList): condition1 = True
+                        
+    for i in range(len(posList)):  
+        if(posList[i]['openPrice'] == ask): orderDuplicate = True
+
     #-----SumCondition-----
     if(sys_openOder == True
+    and condition1 == True
+    and orderDuplicate == False
     and condition_rang == True):conditions = True
     return conditions
 
@@ -162,7 +172,7 @@ class  accountManagement:
     def __init__(self):
         self._client=MongoClient("mongodb+srv://wasan:1234@cluster0.ujivx.gcp.mongodb.net/trading_db?retryWrites=true&w=majority")
         self._db=self._client.get_database('trading_db')   
-        self._collection = 'bitkub_trade'
+        self._collection = ''
         self.account = { 
                     'account':'',
                     'initialize':0.0, 
@@ -246,7 +256,6 @@ class  accountManagement:
 
 
 #//////////////////////////////////////////////////////////////////////////
-
 class marketAPI:
     #API sub function
     def _json_encode(self,data):
@@ -260,9 +269,14 @@ class marketAPI:
     def _get(self,url): 
         try:
             res = requests.get(API_HOST + url)
-            return json.loads(res.text)["result"]
+            res = json.loads(res.text)
+            if('result' in res):
+                return res['result']
+            else: 
+                print(f'Error:{res}',end="\r")
+                return False
         except:
-            print(f'Error:{res}',end="\r")
+            print(f'Error:{res.text}',end="\r")
             return False
     
     def _post(self,url,data): 
@@ -270,9 +284,14 @@ class marketAPI:
             signature = self._sign(data)
             data['sig'] = signature
             res = requests.post(API_HOST + url, headers=header, data=self._json_encode(data))
-            return json.loads(res.text)["result"]
+            res = json.loads(res.text)
+            if('result' in res):
+                return res['result']
+            else: 
+                print(f'Error:{res}',end="\r")
+                return False
         except:
-            print(f'Error:{res}',end="\r")
+            print(f'Error:{res.text}',end="\r")
             return False
         
     #API function
@@ -313,9 +332,14 @@ class  tradeAPI:
     def _get(self,url): 
         try:
             res = requests.get(API_HOST + url)
-            return json.loads(res.text)["result"]
+            res = json.loads(res.text)
+            if('result' in res):
+                return res['result']
+            else: 
+                print(f'Error:{res}',end="\r")
+                return False
         except:
-            print(f'Error:{res}',end="\r")
+            print(f'Error:{res.text}',end="\r")
             return False
     
     def _post(self,url,data): 
@@ -323,9 +347,14 @@ class  tradeAPI:
             signature = self._sign(data)
             data['sig'] = signature
             res = requests.post(API_HOST + url, headers=header, data=self._json_encode(data))
-            return json.loads(res.text)["result"]
+            res = json.loads(res.text)
+            if('result' in res):
+                return res['result']
+            else: 
+                print(f'Error:{res}',end="\r")
+                return False
         except:
-            print(f'Error:{res}',end="\r")
+            print(f'Error:{res.text}',end="\r")
             return False
      #-----------------
     def getServerTime(self):
@@ -341,7 +370,7 @@ class  tradeAPI:
         if(tm != False):
             data = {
             'sym': sym, #Symbol
-            'amt': amtSize(), # XRP amount you want to spend
+            'amt': amt, # XRP amount you want to spend
             'rat': price, #Price
             'typ': typ,#Order type: limit or market
             'ts': tm,
@@ -374,14 +403,24 @@ class  tradeAPI:
             print('cannot place orders                          ')
             return False
 
+
 #/////////////////////////////////////////////////////////////////////////
 
 #---------------------------sent order FUNCTION ---------------------------
 #function ยิง order 
-def OrderSend(market,orderType,amt,price,mktType):
+def OrderOpen(market,orderType,mktType):
+    if(orderType=='buy'):
+        price = ask
+        fee = takeFees
+    else:
+        price = bid
+        fee = makeFees
+
+    amt = amtSize(orderType,price)
+
     if(sys_realTrade == True):
         #ยิง order และรับค่าที่ return มา ถ้ายิงจริงจะมาปรับปรุงส่วนนี้เพิ่มเติม
-        res = trade.placeOrder(market,orderType,amt,price,'market')
+        res = trade.placeOrder(market,orderType,amt,price,mktType)
 
     else:
         #res = trade.testPlaceOrder(market,orderType,lot,price,'market')
@@ -406,8 +445,10 @@ def OrderClose(order):
         price = ask
         fee = makeFees
 
+    amt = amtSize(orderType,price)
+
     if(sys_realTrade == True):
-        res = trade.placeOrder(order['symbol'],orderType,order['size'],price,'market')
+        res = trade.placeOrder(order['symbol'],orderType,amt,price,'market')
     else:
         #res = trade.testPlaceOrder(order['symbol'],orderType,lot,price,'market')
         res = { "id":"Test", 
@@ -433,13 +474,12 @@ def main():
     ask = market.getAsks(symbol)[0][3]
     priceZone =  round(((ask/priceTick)//1)*priceTick ,printDecimal)
 
+    
     #Time action
-    if(ask != False and tm.hour != acc.account['tmZone']):
-        acc.account['tmZone'] = tm.hour
-
-      
+    if(ask != False):
+        
         for i in range(len(posList)):
-            if(closeOrder() == True):
+            if(closeOrder(posList[i]) == True):
                 res = OrderClose(posList[i])
                 if(res != False):
                     #add Close Order ใน list 
@@ -473,49 +513,55 @@ def main():
                     del posList[i]
                 else:
                     print('error: close order')
-  
  
         #-----openOrder
         if(openOrder() == True):
             #------ balance check ------
-            #รับค่าที่ได้จาก condition ชุดคำสั่ง Buy 
-            orderType = 'buy'
-            res = OrderSend(symbol,orderType,amtSize(),ask,'market')
-            #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
-            if(res != False):
-                Order  = {
-                    'positions':'openPositions',
-                    'symbol':symbol,
-                    'type':orderType,
-                    'size':res["amt"],
-                    'openHash':res["hash"],
-                    'openPrice':res["rat"],
-                    'openTime':res["ts"],
-                    'recive':res["rec"],
-                    'closeHash':'',
-                    'closePrice':0,
-                    'closeTime':0,
-                    'profit':0,
-                    'comment':f'{priceZone}'
-                }
-                msgType = Order['type']
-                msgComment = Order['comment']
-                msgSize    = round(Order['size'],printDecimal)
-                msgPrice  = round(Order['openPrice'],printDecimal)
-                msgRecive  = round(Order["recive"],printDecimal)
-                msgTm      = Order["openTime"]
-                #add createOrder ใน list 
-                posList.append(Order)
-                #save trade
-                acc.save_db(posList[-1])
-                acc.order_out(msgSize)
-                #sent log
-                lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[0]} @ {msgPrice} \r\nrecive {msgRecive} {symbolSplit[1]} ') 
-                print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[0]} @ {msgPrice} recive {msgRecive} {symbolSplit[1]} {msgTm}',end="\r")
-                print('')
-
+             #balance check
+            condition_balance = False 
+            if( ( market.balance()[symbolSplit[0]]['available'] > (amtSize(orderType,price)*ask) ) and (sys_realTrade == True) ):
+                condition_balance = True
             else:
-                print('error: close order')        
+                print('Not enough money.')
+                sys_realTrade == False
+            
+            if(condition_balance):
+                res = OrderOpen(symbol,'sell','market')# sell THB buy XRP
+                #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
+                if(res != False):
+                    Order  = {
+                        'positions':'openPositions',
+                        'symbol':symbol,
+                        'type':orderType,
+                        'size':res["amt"],
+                        'openHash':res["hash"],
+                        'openPrice':res["rat"],
+                        'openTime':res["ts"],
+                        'recive':res["rec"],
+                        'closeHash':'',
+                        'closePrice':0,
+                        'closeTime':0,
+                        'profit':0,
+                        'comment':f'{priceZone}'
+                    }
+                    msgType = Order['type']
+                    msgComment = Order['comment']
+                    msgSize    = round(Order['size'],printDecimal)
+                    msgPrice  = round(Order['openPrice'],printDecimal)
+                    msgRecive  = round(Order["recive"],printDecimal)
+                    msgTm      = Order["openTime"]
+                    #add createOrder ใน list 
+                    posList.append(Order)
+                    #save trade
+                    acc.save_db(posList[-1])
+                    acc.order_out(msgSize)
+                    #sent log
+                    lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[0]} @ {msgPrice} \r\nrecive {msgRecive} {symbolSplit[1]} ') 
+                    print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[0]} @ {msgPrice} recive {msgRecive} {symbolSplit[1]} {msgTm}',end="\r")
+                    print('')
+
+                else:
+                    print('error: openOrder order')        
 
         #ใช้กับ google Code
         #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")

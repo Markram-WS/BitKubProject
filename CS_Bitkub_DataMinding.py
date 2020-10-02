@@ -29,7 +29,8 @@ def initialization():
     acc = accountManagement()
     trade = tradeAPI()
     #--------------------------variable-----------------------------
-    acc.account['account']='bitkub-dataMinding'
+    acc.account['account']='bitkub_trade'
+    acc._collection='bitkub_trade'
     #ProductSetting
     global symbol, symbolSplit
     symbol = 'THB_XRP'  # THB_XRP
@@ -162,7 +163,7 @@ class  accountManagement:
     def __init__(self):
         self._client=MongoClient("mongodb+srv://wasan:1234@cluster0.ujivx.gcp.mongodb.net/trading_db?retryWrites=true&w=majority")
         self._db=self._client.get_database('trading_db')   
-        self._collection = 'bitkub_trade'
+        self._collection = ''
         self.account = { 
                     'account':'',
                     'initialize':0.0, 
@@ -262,7 +263,7 @@ class marketAPI:
             res = requests.get(API_HOST + url)
             return json.loads(res.text)["result"]
         except:
-            print(f'Error:{res}',end="\r")
+            print(f'Error:{json.loads(res.text)}',end="\r")
             return False
     
     def _post(self,url,data): 
@@ -272,7 +273,7 @@ class marketAPI:
             res = requests.post(API_HOST + url, headers=header, data=self._json_encode(data))
             return json.loads(res.text)["result"]
         except:
-            print(f'Error:{res}',end="\r")
+            print(f'Error:{json.loads(res.text)}',end="\r")
             return False
         
     #API function
