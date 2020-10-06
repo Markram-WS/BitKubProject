@@ -115,69 +115,58 @@ def closeOrder(pos):
     # ask//priceTick ทำให้ทศนิยม priceTick ตำแหน่งกลายเป็นจำนวณเต็ม
     # %2 focus จำนวณที่ 2 หารลงตัว
     #-----initialize-----
-    condition_price     =   False
+    #condition_price     =   False
     condition1 = False
-    condition2 = True
-    condition3 = True
-    conditions  =   False
+    condition2 = False
+    totalCondition  =   False
     #-----condition-----
     #price check
-    if(((ask/priceTick)/1)%1.0 == 0.0):     condition_price = True
-    if(ask in priceList):                   condition1 = True
-    if(float(pos['comment']) != priceZone): condition2 = True
-    if(( (ask and bid) - pos['openPrice']) > 0):       condition3 = True
+    #if(((ask/priceTick)/1)%1.0 == 0.0):     condition_price = True
+    
+    #check price list
+    if(priceZone in priceList):                   condition1 = True
+    
+    #range
+    if(priceZone > float(pos['comment'])): condition2 = True
+    
+
     #-----SumCondition-----
-    if(condition_price
-    and condition1
+    if(condition1
     and condition2
-    and condition3):conditions = True
-
-    #--------------Test-----------------
-    if(conditions == True):
-        testcomment = float(pos['comment'])
-        testOpenprice =  pos['openPrice']
-        print(f'')
-        print(f'ask in price  {ask in priceList}')
-        print(f'')
-        print(f'ask {ask}')
-        print(f'Openprice {testOpenprice}')
-        print(f'ask - pos[open] {ask -testOpenprice}')
-        print(f'')
-        print(f'comment {testcomment}')
-        print(f'priceZone {priceZone}')
-        print(f'c != priceZone {testcomment != priceZone}')
-        print("--------------------------------")
-        print(f'')
-
-    return conditions
+    ):totalCondition = True
+    return totalCondition
 
 def openOrder():
     # ask//priceTick ทำให้ทศนิยม priceTick ตำแหน่งกลายเป็นจำนวณเต็ม
     # %2 focus จำนวณที่ 2 หารลงตัว
     #-----initialize-----
-    condition_price     =   False
+    #condition_price     =   False
     condition_rang      =   False
     condition1 = False
     orderDuplicate = False
+    totalCondition  =   False
 
-    conditions  =   False
     #-----condition-----
     #price check
-    if(((ask/priceTick)/1)%1.0 == 0.0): condition_price = True
+    #if(((ask/priceTick)/1)%1.0 == 0.0): condition_price = True
+
     #rang check
     if( (ask <= maxPrice and ask >= minPrice ) or ( maxPrice == 0 and minPrice == 0 ) ): condition_rang = True
-         
+
+    #check price list
     if(ask in priceList): condition1 = True
-       
+
+    #check orde not Duplicate
     for i in range(len(posList)):  
-        if( posList[i]['openPrice'] == (ask or bid) ): orderDuplicate = True
+        if( float(posList[i]['comment']) == priceZone): orderDuplicate = True
 
     #-----SumCondition-----
     if(sys_openOder == True
     and condition1 == True
     and orderDuplicate == False
-    and condition_rang == True):conditions = True
-    return conditions
+    and condition_rang == True
+    ):totalCondition = True
+    return totalCondition
 
 #///////////////////////////////////////////////////////////////////
 
@@ -596,7 +585,7 @@ def main():
         #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
         #ใช้กับ CMD
     if(ask != False):   
-        print(f'BID:{round(bid,printDecimal)} ASK:{round(ask,printDecimal)} {date_time}     ',end="\r")
+        print(f'Zone:{priceZone} BID:{round(bid,printDecimal)} ASK:{round(ask,printDecimal)} {date_time}     ',end="\r")
     else:
         print(f'Error,plese check connection.                                               ',end="\r")
 
