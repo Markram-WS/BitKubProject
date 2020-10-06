@@ -46,9 +46,9 @@ def initialization():
     delta  = 0.05
     printDecimal = 3
     #SystemSetitng
-    global system,sys_realTrade,sys_openOder
-    system = True #While loop
-    sys_realTrade = True
+    global sys_tradingsystem,sys_realTrade,sys_openOder
+    sys_tradingsystem = True #While loop
+    sys_realTrade = False
     sys_openOder = True
     clearOrder = False
     clearHistory = False
@@ -61,7 +61,7 @@ def initialization():
             print("Id : %s,  Symbol : %s [%s]" %(SymbolsInfo[x]['id'] ,SymbolsInfo[x]['symbol'] ,SymbolsInfo[x]['info'])) 
             break
     if(minPrice>maxPrice):print('minPrice must lest than maxPrice')
-    if(minPrice>maxPrice):system = False       
+    if(minPrice>maxPrice):sys_tradingsystem = False       
     
     print(f"delta {delta}")   
     print(f"range [{minPrice} - {maxPrice}]")   
@@ -117,14 +117,38 @@ def closeOrder(pos):
     #-----initialize-----
     condition_price     =   False
     condition1 = False
+    condition2 = True
+    condition3 = True
     conditions  =   False
     #-----condition-----
     #price check
-    if(((ask/priceTick)/1)%1.0 == 0.0): condition_price = True
-    if(ask in priceList and pos['openPrice'] != ask and (ask - pos['openPrice']) > 0): condition1 = True
+    if(((ask/priceTick)/1)%1.0 == 0.0):     condition_price = True
+    if(ask in priceList):                   condition1 = True
+    if(float(pos['comment']) != priceZone): condition2 = True
+    if(( (ask and bid) - pos['openPrice']) > 0):       condition3 = True
     #-----SumCondition-----
     if(condition_price
-    and condition1):conditions = True
+    and condition1
+    and condition2
+    and condition3):conditions = True
+
+    #--------------Test-----------------
+    if(conditions == True):
+        testcomment = float(pos['comment'])
+        testOpenprice =  pos['openPrice']
+        print(f'')
+        print(f'ask in price  {ask in priceList}')
+        print(f'')
+        print(f'ask {ask}')
+        print(f'Openprice {testOpenprice}')
+        print(f'ask - pos[open] {ask -testOpenprice}')
+        print(f'')
+        print(f'comment {testcomment}')
+        print(f'priceZone {priceZone}')
+        print(f'c != priceZone {testcomment != priceZone}')
+        print("--------------------------------")
+        print(f'')
+
     return conditions
 
 def openOrder():
@@ -144,9 +168,9 @@ def openOrder():
     if( (ask <= maxPrice and ask >= minPrice ) or ( maxPrice == 0 and minPrice == 0 ) ): condition_rang = True
          
     if(ask in priceList): condition1 = True
-                        
+       
     for i in range(len(posList)):  
-        if(posList[i]['openPrice'] == ask): orderDuplicate = True
+        if( posList[i]['openPrice'] == (ask or bid) ): orderDuplicate = True
 
     #-----SumCondition-----
     if(sys_openOder == True
@@ -464,7 +488,7 @@ def OrderClose(order):
 #//////////////////////////////////////////////////////////////////////////////////////
 
 def main():
-    global bid,ask,date_time
+    global bid,ask,date_time,priceZone
     priceZone=0 #set zone zero
     tm = datetime.now()
     date_time = tm.strftime('%Y-%m-%d %H:%M:%S')
@@ -511,22 +535,27 @@ def main():
                 
                     #update arr
                     del posList[i]
+                    break# end loop
                 else:
                     print('error: close order')
- 
         #-----openOrder
         if(openOrder() == True):
             #------ balance check ------
              #balance check
+
             condition_balance = False 
-            if( ( market.balance()[symbolSplit[0]]['available'] > (amtSize(orderType,price)*ask) ) and (sys_realTrade == True) ):
-                condition_balance = True
-            else:
-                print('Not enough money.')
-                sys_realTrade == False
+            if(sys_realTrade == True):
+                if( ( market.balance()[symbolSplit[0]]['available'] > (amtSize('sell',ask)*ask) ) ):
+                    condition_balance = True
+                else:
+                    print('Not enough money.')
+                    sys_tradingsystem == False
             
-            if(condition_balance):
-                res = OrderOpen(symbol,'sell','market')# sell THB buy XRP
+       
+            if(condition_balance == True or sys_realTrade == False):
+        
+                orderType = 'sell'
+                res = OrderOpen(symbol,orderType,'market')# sell THB buy XRP
                 #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
                 if(res != False):
                     Order  = {
@@ -574,6 +603,6 @@ def main():
 #//////////////////////////////////////////////////////////////////////
 
 initialization()
-while(system):
+while(sys_tradingsystem):
     main()
     time.sleep(1)

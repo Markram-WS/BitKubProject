@@ -151,7 +151,7 @@ def openOrder():
 #Msg Line
 def lineSendMas(msg_line):
     url_line = 'https://notify-api.line.me/api/notify'
-    token_line = 'QHQPbxDrgD35meR5LDh0PniRVDGYUBNrH8ls42ThiKM'
+    token_line = 'QuzxdumsNYRMU324pTrSquU0HFv7CD0Jcea0iSxGDrm'
     headers_line = {'content-type':'application/x-www-form-urlencoded','Authorization':'Bearer '+token_line}
     requests.post(url_line, headers=headers_line , data = {'message':msg_line})
 
