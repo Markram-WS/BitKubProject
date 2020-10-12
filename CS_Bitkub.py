@@ -38,8 +38,8 @@ def initialization():
 
     #Grid
     global maxPrice,minPrice,priceTick,delta,printDecimal,makeFees,takeFees
-    makeFees= 0.0025#0.25%
-    takeFees= 0.0025#0.25%
+    makeFees= 0.0025 #0.25%
+    takeFees= 0.0025 #0.25%
     maxPrice = 0
     minPrice = 0
     priceTick = 0.01
@@ -48,7 +48,7 @@ def initialization():
     #SystemSetitng
     global sys_tradingsystem,sys_realTrade,sys_openOder
     sys_tradingsystem = True #While loop
-    sys_realTrade = False
+    sys_realTrade = True
     sys_openOder = True
     clearOrder = False
     clearHistory = False
@@ -75,10 +75,10 @@ def initialization():
     posList=[]
     #---------ClearOrder-------
     if(clearOrder):
-        acc.clear_db({'positions':'openPositions'})
+        acc.clear_db({'position':'open'})
         print("-clearOrder")
     if(clearHistory):
-        acc.clear_db({'positions':'closePositions'})
+        acc.clear_db({'position':'close'})
         print("-clearHistory")
     #---------loadOrder-------
     if(True):
@@ -123,17 +123,13 @@ def closeOrder(pos):
     #price check
     #if(((ask/priceTick)/1)%1.0 == 0.0):     condition_price = True
     
-    #check price list
-    if(priceZone in priceList):                   condition1 = True
-    
+
     #range
-    if(priceZone > float(pos['comment'])): condition2 = True
+    if(priceZone > float(pos['comment']) + (0.05 * 4.6619)): condition1 = True
     
 
     #-----SumCondition-----
-    if(condition1
-    and condition2
-    ):totalCondition = True
+    if(condition1):totalCondition = True
     return totalCondition
 
 def openOrder():
@@ -242,11 +238,11 @@ class  accountManagement:
     
     #โหลดข้อมูลส่วน array ซึ่งจะเก็บสถานะไม้ CS ที่เปิดค้างไว้อยู่
     def load_order(self):
-        if (self._db[self._collection].count_documents({'positions':'openPositions'}))==0:
+        if (self._db[self._collection].count_documents({'position':'open'}))==0:
             arr=[]
         else:
             arr=[]
-            for data in self._db[self._collection].find({'positions':'openPositions'}):
+            for data in self._db[self._collection].find({'position':'open'}):
                 arr.append(data)
         return arr
 
@@ -258,6 +254,7 @@ class  accountManagement:
     def update_db(self,query,values):
         res = self._db[self._collection].update_one(query, { "$set": values })
         return res
+
 
     #----clear worksheet
     def clear_db(self,target):
@@ -494,9 +491,10 @@ def main():
         for i in range(len(posList)):
             if(closeOrder(posList[i]) == True):
                 res = OrderClose(posList[i])
+                print(res)
                 if(res != False):
                     #add Close Order ใน list 
-                    posList[i]['positions'] = 'closePositions'
+                    posList[i]['position'] = 'close'
                     posList[i]['closeHash'] = res["hash"]
                     posList[i]['closePrice'] = res["rat"]
                     posList[i]['closeTime'] = res["ts"]
@@ -508,14 +506,15 @@ def main():
                     msgRecive     =   round(posList[i]["profit"],printDecimal)
                     msgTm         =   posList[i]['closeTime']
                     msgType       =   posList[i]['type']
-
+                    msgComment    =   posList[i]['comment']
+                    
                     if(msgType == 'buy'):
                         msgType = 'sell'
                     else:
                         msgType = 'buy'
 
                     #update history
-                    acc.update_db({'positions':'openPositions'},posList[i])
+                    acc.update_db({ "comment": msgComment,"position":'open' },posList[i])
                     acc.order_in(msgSize,msgRecive)
                     #sent log
                     lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[1]} @ {msgPrice} \r\nprofit {msgRecive} {symbolSplit[0]} ') 
@@ -548,7 +547,7 @@ def main():
                 #ถ้าการยิง oreder สำเร็จ จากนั้นเตรียมข้อมูลเขียน log
                 if(res != False):
                     Order  = {
-                        'positions':'openPositions',
+                        'position':'open',
                         'symbol':symbol,
                         'type':orderType,
                         'size':res["amt"],
@@ -558,7 +557,7 @@ def main():
                         'recive':res["rec"],
                         'closeHash':'',
                         'closePrice':0,
-                        'closeTime':0,
+                        'closeTime':'',
                         'profit':0,
                         'comment':f'{priceZone}'
                     }
