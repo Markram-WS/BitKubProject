@@ -263,7 +263,7 @@ class marketAPI:
             res = requests.get(API_HOST + url)
             return json.loads(res.text)["result"]
         except:
-            print(f'Error:{json.loads(res.text)}',end="\r")
+            print(f'Error:{res}',end="\r")
             return False
     
     def _post(self,url,data): 
@@ -273,7 +273,7 @@ class marketAPI:
             res = requests.post(API_HOST + url, headers=header, data=self._json_encode(data))
             return json.loads(res.text)["result"]
         except:
-            print(f'Error:{json.loads(res.text)}',end="\r")
+            print(f'Error:{res}',end="\r")
             return False
         
     #API function

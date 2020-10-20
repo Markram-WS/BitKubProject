@@ -286,7 +286,7 @@ class marketAPI:
                 print(f'Error:{res}',end="\r")
                 return False
         except:
-            print(f'Error:{res.text}',end="\r")
+            print(f'Error:{res}',end="\r")
             return False
     
     def _post(self,url,data): 
@@ -301,7 +301,7 @@ class marketAPI:
                 print(f'Error:{res}',end="\r")
                 return False
         except:
-            print(f'Error:{res.text}',end="\r")
+            print(f'Error:{res}',end="\r")
             return False
         
     #API function
@@ -349,7 +349,7 @@ class  tradeAPI:
                 print(f'Error:{res}',end="\r")
                 return False
         except:
-            print(f'Error:{res.text}',end="\r")
+            print(f'Error:{res}',end="\r")
             return False
     
     def _post(self,url,data): 
@@ -364,7 +364,7 @@ class  tradeAPI:
                 print(f'Error:{res}',end="\r")
                 return False
         except:
-            print(f'Error:{res.text}',end="\r")
+            print(f'Error:{res}',end="\r")
             return False
      #-----------------
     def getServerTime(self):
@@ -389,6 +389,8 @@ class  tradeAPI:
                 res = self._post('/api/market/place-ask',data)
             if(orderType=='sell'):
                 res = self._post('/api/market/place-bid',data)
+            #*-----------Test-------------
+            print(res)
             return res
         else:
             print('cannot place orders                          ')
