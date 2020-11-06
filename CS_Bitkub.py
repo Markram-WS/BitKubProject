@@ -105,9 +105,9 @@ def initialization():
 #ปรับ vol. ในการส่งคำสั่ง
 def amtSize(side,price):
     if side == "sell":#sell THB
-        lot = 10
+        lot = 20
     elif side == "buy":#buy THB
-        lot = round((10/price)+0.00001,5)
+        lot = round((20/price),5) 
     return  lot
 
 #กำหนดฟังก์ชั่นในการส่วคำสั่ง
@@ -390,7 +390,6 @@ class  tradeAPI:
             if(orderType=='sell'):
                 res = self._post('/api/market/place-bid',data)
             #*-----------Test-------------
-            print(res)
             return res
         else:
             print('cannot place orders                          ')
@@ -491,9 +490,9 @@ def main():
     if(ask != False):
         
         for i in range(len(posList)):
+
             if(closeOrder(posList[i]) == True):
                 res = OrderClose(posList[i])
-                print(res)
                 if(res != False):
                     #add Close Order ใน list 
                     posList[i]['position'] = 'close'
@@ -527,7 +526,8 @@ def main():
                     del posList[i]
                     break# end loop
                 else:
-                    print('error: close order')
+                    print(f'error: close order : {res}')
+
         #-----openOrder
         if(openOrder() == True):
             #------ balance check ------
