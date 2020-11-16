@@ -487,7 +487,7 @@ def main():
 
     
     #Time action
-    if(ask != False):
+    if(ask != False and bid != False):
         
         for i in range(len(posList)):
 
@@ -585,10 +585,10 @@ def main():
         #ใช้กับ google Code
         #print('\r BID:{:.2f} ASK:{:.2f} {}'.format(bid,ask,date_time),end="")
         #ใช้กับ CMD
-    if(ask != False):   
+    if(ask != False and bid != False):   
         print(f'Zone:{priceZone} BID:{round(bid,printDecimal)} ASK:{round(ask,printDecimal)} {date_time}     ',end="\r")
     else:
-        print(f'Error,plese check connection.                                               ',end="\r")
+        print(f'Error,plese check connection.                                                              ',end="\r")
 
 #//////////////////////////////////////////////////////////////////////
 
