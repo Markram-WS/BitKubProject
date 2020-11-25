@@ -38,8 +38,8 @@ def initialization():
 
     #Grid
     global maxPrice,minPrice,priceTick,delta,printDecimal,makeFees,takeFees
-    makeFees= 0.0025 #0.25%
-    takeFees= 0.0025 #0.25%
+    makeFees= 1-0.0025 #0.25%
+    takeFees= 1-0.0025 #0.25%
     maxPrice = 0
     minPrice = 0
     priceTick = 0.01
@@ -125,7 +125,9 @@ def closeOrder(pos):
     
 
     #range
-    if(priceZone > float(pos['comment']) + (0.05 * 4.6619)): condition1 = True
+    if(priceZone > float(pos['comment']) + (0.05 * 4.6619)): 
+        condition1 = True
+
     
 
     #-----SumCondition-----
@@ -502,13 +504,13 @@ def main():
                     posList[i]['closeHash'] = res["hash"]
                     posList[i]['closePrice'] = res["rat"]
                     posList[i]['closeTime'] = res["ts"]
-                    posList[i]['profit'] =  res["rec"] - posList[i]['size']
-
+                    posList[i]['profit'] =  ((res["rat"]*posList[i]['recive'])*takeFees) - posList[i]['size']
+    
                     msgComment    =   posList[i]['comment']
                     msgSize       =   round(posList[i]["recive"],printDecimal)
                     msgPrice      =   round(posList[i]['closePrice'],printDecimal)
                     msgRecive     =   round(posList[i]["profit"],printDecimal)
-                    msgTm         =   datetime.datetime.fromtimestamp(float(posList[i]['closeTime'])/1000.0)
+                    msgTm         =   datetime.datetime.fromtimestamp(float(posList[i]['closeTime']))
                     msgType       =   posList[i]['type']
                     msgComment    =   posList[i]['comment']
                     
@@ -521,8 +523,8 @@ def main():
                     acc.update_db({ "comment": msgComment,"position":'open' },posList[i])
                     acc.order_in(msgSize,msgRecive)
                     #sent log
-                    lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[1]} @ {msgPrice} \r\nprofit {msgRecive} {symbolSplit[0]} ') 
-                    print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[1]} @ {msgPrice} profit {msgRecive} {symbolSplit[0]} {msgTm}',end="\r")
+                    lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize}{symbolSplit[1]} @ {msgPrice} \r\n p/l:{msgRecive}{symbolSplit[0]} ') 
+                    print(f'{msgType}:{symbol} zone:{msgComment} {msgSize}{symbolSplit[1]} @ {msgPrice} p/l:{msgRecive}{symbolSplit[0]}   {msgTm}',end="\r")
                     print('')
                 
                     #update arr
@@ -559,7 +561,7 @@ def main():
                         'openHash':res["hash"],
                         'openPrice':res["rat"],
                         'openTime':res["ts"],
-                        'recive':res["rec"],
+                        'recive':round(res["amt"]/res["rat"],5)*makeFees,
                         'closeHash':'',
                         'closePrice':0,
                         'closeTime':'',
@@ -570,16 +572,16 @@ def main():
                     msgComment = Order['comment']
                     msgSize    = round(Order['size'],printDecimal)
                     msgPrice  = round(Order['openPrice'],printDecimal)
-                    msgRecive  = round(Order["recive"],printDecimal)
-                    msgTm      = datetime.datetime.fromtimestamp(float(Order["openTime"])/1000.0)
+                    msgRecive  = round(Order['recive'],printDecimal)
+                    msgTm      = datetime.datetime.fromtimestamp(float(Order["openTime"]))
                     #add createOrder ใน list 
                     posList.append(Order)
                     #save trade
                     acc.save_db(posList[-1])
                     acc.order_out(msgSize)
                     #sent log
-                    lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize} {symbolSplit[0]} @ {msgPrice} \r\nrecive {msgRecive} {symbolSplit[1]} ') 
-                    print(f'{msgType}:{symbol} zone:{msgComment} {msgSize} {symbolSplit[0]} @ {msgPrice} recive {msgRecive} {symbolSplit[1]} {msgTm}',end="\r")
+                    lineSendMas(f'{msgType} {symbol} {msgComment} \r\n{msgSize}{symbolSplit[0]} @ {msgPrice} \r\nrecive:{msgRecive}{symbolSplit[1]} ') 
+                    print(f'{msgType}:{symbol} zone:{msgComment} {msgSize}{symbolSplit[0]} @ {msgPrice} recive:{msgRecive}{symbolSplit[1]}   {msgTm}',end="\r")
                     print('')
 
                 else:
