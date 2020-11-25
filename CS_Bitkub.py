@@ -70,7 +70,7 @@ def initialization():
             
     #--------------------------Array  initialization-----------------------------  
     global posList,priceList
-    priceList=list(range(1,101))
+    priceList=list(range(1,201))
     priceList=[round((i * 0.05)*4.6619, 2) for i in priceList]
     posList=[]
     #---------ClearOrder-------
@@ -347,10 +347,8 @@ class  tradeAPI:
                 return res['result']
             else: 
                 print(f'Error:{res}',end="\r")
-                return False
         except:
             print(f'Error:{res}',end="\r")
-            return False
     
     def _post(self,url,data): 
         try:
@@ -480,15 +478,20 @@ def main():
     tm = datetime.now()
     date_time = tm.strftime('%Y-%m-%d %H:%M:%S')
     #[0]orderId [1]timestamp [2]volume [3]rate [4]amount
-    
-    bid = market.getBids(symbol)[0][3]
-    ask = market.getAsks(symbol)[0][3]
-    priceZone =  round(((ask/priceTick)//1)*priceTick ,printDecimal)
+    try:
+        bid = market.getBids(symbol)[0][3]
+        ask = market.getAsks(symbol)[0][3]
+    except:
+        bid = market.getBids(symbol)
+        bid = False
+        ask = market.getAsks(symbol)
+        ask = False
 
-    
     #Time action
     if(ask != False and bid != False):
-        
+
+        priceZone =  round(((ask/priceTick)//1)*priceTick ,printDecimal)
+
         for i in range(len(posList)):
 
             if(closeOrder(posList[i]) == True):
@@ -505,7 +508,7 @@ def main():
                     msgSize       =   round(posList[i]["recive"],printDecimal)
                     msgPrice      =   round(posList[i]['closePrice'],printDecimal)
                     msgRecive     =   round(posList[i]["profit"],printDecimal)
-                    msgTm         =   posList[i]['closeTime']
+                    msgTm         =   datetime.datetime.fromtimestamp(float(posList[i]['closeTime'])/1000.0)
                     msgType       =   posList[i]['type']
                     msgComment    =   posList[i]['comment']
                     
@@ -535,7 +538,7 @@ def main():
 
             condition_balance = False 
             if(sys_realTrade == True):
-                if( ( market.balance()[symbolSplit[0]]['available'] > (amtSize('sell',ask)*ask) ) ):
+                if(  market.balance()[symbolSplit[0]]['available'] > amtSize('sell',ask)  ):
                     condition_balance = True
                 else:
                     print('Not enough money.')
@@ -568,7 +571,7 @@ def main():
                     msgSize    = round(Order['size'],printDecimal)
                     msgPrice  = round(Order['openPrice'],printDecimal)
                     msgRecive  = round(Order["recive"],printDecimal)
-                    msgTm      = Order["openTime"]
+                    msgTm      = datetime.datetime.fromtimestamp(float(Order["openTime"])/1000.0)
                     #add createOrder ใน list 
                     posList.append(Order)
                     #save trade
