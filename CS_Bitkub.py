@@ -1,11 +1,11 @@
-from datetime import datetime
+import datetime
+from datetime import datetime as dt
 import time
 import requests 
 import hmac
 import json
 import hashlib
 import numpy as np
-from datetime import datetime
 from pymongo import MongoClient,results 
 
 # API info
@@ -475,7 +475,7 @@ def OrderClose(order):
 def main():
     global bid,ask,date_time,priceZone
     priceZone=0 #set zone zero
-    tm = datetime.now()
+    tm = dt.now()
     date_time = tm.strftime('%Y-%m-%d %H:%M:%S')
     #[0]orderId [1]timestamp [2]volume [3]rate [4]amount
     try:
