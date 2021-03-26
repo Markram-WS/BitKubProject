@@ -297,7 +297,7 @@ class main():
                 'size': res['size'],
                 'sl': '',
                 'tp': '',
-                'fee':round(self.size*self.fee,5),
+                'fee':round( (res['size']*res['price'])*self.fee ,5),
                 'order_comment':'',
                 }
 
@@ -355,14 +355,15 @@ class main():
         self.order[f'{zone}'][sym]['close_id'] = res["id"]
         self.order[f'{zone}'][sym]['close_date'] = res["createdAt"]
         self.order[f'{zone}'][sym]['close_price'] = res["price"]
-        close_val = res["price"]*self.order[f'{zone}'][sym]['size']
+        close_val = res["price"]*self.order[f'{zone}'][sym]['size']                                 #USDT
+        open_val = self.order[f'{zone}'][sym]['size'] * self.order[f'{zone}'][sym]['open_price']    #USDT
         self.order[f'{zone}'][sym]['fee'] = self.order[f'{zone}'][sym]['fee'] + (close_val * self.fee)
         
         #calculate order_profit
         if(self.order[f'{zone}'][sym]['side']=='buy'):
-            self.order[f'{zone}'][sym]['order_profit'] = close_val-res["price"]-self.order[f'{zone}'][sym]['fee'] 
+            self.order[f'{zone}'][sym]['order_profit'] = close_val - open_val - self.order[f'{zone}'][sym]['fee'] 
         elif(self.order[f'{zone}'][sym]['side']=='sell'):
-            self.order[f'{zone}'][sym]['order_profit'] = res["price"]-close_val-self.order[f'{zone}'][sym]['fee'] 
+            self.order[f'{zone}'][sym]['order_profit'] = open_val - close_val - self.order[f'{zone}'][sym]['fee'] 
         else:
             print('error calculate order_profit')
             print('')
