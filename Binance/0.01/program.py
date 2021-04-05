@@ -111,7 +111,7 @@ class ftxAPI():
                 "price": price,
                 "remainingSize": size,
                 "side": side,
-                "size": size,
+                "size": round(size,2),
                 "status": "open",
                 "type": type_ord,
               }
@@ -306,7 +306,7 @@ class main():
     def long_open_conditon(self):
         #------check short_conditon
         long_conditon = all([  self.ticker['ask'] <= self.ma,
-                               abs(self.ticker['ask'] - self.zone) < self.margin/100,
+                               abs(self.ticker['ask'] - self.zone) < self.margin/500,
                                str(self.zone) not in self.order.keys()
                           ])
         
@@ -328,7 +328,7 @@ class main():
     def short_open_conditon(self):
         #------check short_conditon
         short_conditon = all([    self.ticker['ask'] >= self.ma,
-                               abs(self.ticker['ask'] - self.zone) < self.margin/100,
+                               abs(self.ticker['ask'] - self.zone) < self.margin/500,
                                str(self.zone) not in self.order.keys()
                           ])
 
@@ -375,45 +375,69 @@ class main():
         return self.order[f'{zone}'][sym]
         
     #-----process close_order---------
+
     #-----CLOSE LONG
     def process_closeOrder(self,zone):
         zone = float(zone)
-        if(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'buy'
-          and self.ticker['bid'] >= zone + self.margin):                      
-            dict_order=list([])
-            zProfit = 0                      
-            for i in range(len(self.sys)):
-                price = self.sys[i].ticker['ask'] if self.side[-i] == 'buy' else self.sys[i].ticker['bid']
-                dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[-i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price,zone,price))
-                #cal zProfit
-                zProfit = zProfit + dict_order[i]['order_profit']
-            print(f' ----------------------------------- close long order ----------------------------------- ')
-            for i in range(len(self.sys)):
-                dict_order[i]['zone_profit']=zProfit
-                self.write_log(dict_order[i])
-                print(dict_order[i])
-            #SAVE LOG
-            del self.order[f'{zone}']
-            self.save_order()
-            print('')
+        #---conditon long---
+        open_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']) - self.order[f'{zone}'][self.sys[0].symbol]['fee']
+        open_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']) - self.order[f'{zone}'][self.sys[0].symbol]['fee']
+        zProfit = 0  
+        conditon_close=False
+        #-------------------
+        if(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'buy'):          
+            current_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['bid']) * (1-self.fee )
+            current_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['ask']) * (1-self.fee )
+            if((current_order_sys1-open_order_sys1) + (open_order_sys2-current_order_sys2) >= self.margin and  self.ticker['bid'] - zone > self.margin):       
+                dict_order=list([])            
+                for i in range(len(self.sys)):
+                    price = self.sys[i].ticker['ask'] if self.side[-i] == 'buy' else self.sys[i].ticker['bid']
+                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[-i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price,zone,price))
+                    #cal zProfit
+                    zProfit = zProfit + dict_order[i]['order_profit']
+                print(f' ----------------------------------- close long order ----------------------------------- ')
+                for i in range(len(self.sys)):
+                    dict_order[i]['zone_profit']=zProfit
+                    self.write_log(dict_order[i])
+                    print(dict_order[i])
+                #SAVE LOG
+                del self.order[f'{zone}']
+                self.save_order()
+                #---test---
+                print('-------test--------')
+                bid=self.ticker['bid']
+                ask=self.ticker['ask']
+                print(f'open sys1{open_order_sys1}, sys2{open_order_sys2}')
+                print(f'current sys1{current_order_sys1}, sys2{current_order_sys2}')
+                print(f'ask{ask}, bid{bid}')
+                print('')
             
         #-----CLOSE SHORT
-        elif(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'sell' 
-           and self.ticker['ask'] <= zone - self.margin):
-            for i in range(len(self.sys)):
-                price = self.sys[i].ticker['ask'] if self.side[i] == 'buy' else self.sys[i].ticker['bid']
-                dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price,zone,price))
-                #cal zProfit
-                zProfit = zProfit + dict_order[i]['order_profit'] 
-            print(f' ----------------------------------- close short order ----------------------------------- ')
-            for i in range(len(self.sys)):
-                dict_order[i]['zone_profit']=zProfit
-                self.write_log(dict_order[i])
-                print(dict_order[i])
-            del self.order[f'{zone}']
-            self.save_order()
-            print('')
-            
+        elif(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'sell'):
+            current_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['ask']) * (1-self.fee )
+            current_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['bid']) * (1-self.fee )
+            if((open_order_sys1-current_order_sys1) + (current_order_sys2-open_order_sys2) >= self.margin and zone-self.ticker['ask']  > self.margin):    
+                for i in range(len(self.sys)):
+                    price = self.sys[i].ticker['ask'] if self.side[i] == 'buy' else self.sys[i].ticker['bid']
+                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price,zone,price))
+                    #cal zProfit
+                    zProfit = zProfit + dict_order[i]['order_profit'] 
+                print(f' ----------------------------------- close short order ----------------------------------- ')
+                for i in range(len(self.sys)):
+                    dict_order[i]['zone_profit']=zProfit
+                    self.write_log(dict_order[i])
+                    print(dict_order[i])
+                del self.order[f'{zone}']
+                self.save_order()
+                #---test---
+                print('-------test--------')
+                bid=self.ticker['bid']
+                ask=self.ticker['ask']
+                print(f'open sys1{open_order_sys1}, sys2{open_order_sys2}')
+                print(f'current sys1{current_order_sys1}, sys2{current_order_sys2}')
+                print(f'ask{ask}, bid{bid}')
+                print('')
+                
     #-----operation------
     def close_order(self):
         processes = list()
@@ -476,9 +500,9 @@ class main():
             self.close_order()
             
             ask  = self.ticker['ask']
-            print(f'{self.sys[0].symbol}/{self.sys[1].symbol} zone:{self.zone} ask:{ask} ma:{self.ma} {self.time_string}  timeout:{self.timeout}  ',end='\r')
+            print(f'{self.sys[0].symbol}/{self.sys[1].symbol}:{self.margin} zone:{self.zone} ask:{ask} ma:{self.ma} {self.time_string}  timeout:{self.timeout}  ',end='\r')
         else:           
-            print(f'connection failed {self.time_string}                                                                                          ',end='\r')
+            print(f'{self.margin} connection failed {self.time_string}                                                                                          ',end='\r')
             
 
 program = main()

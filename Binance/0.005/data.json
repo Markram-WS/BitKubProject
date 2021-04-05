@@ -1,1 +1,1 @@
-{}
+{"0.26": {"XRP-PERP": {"status": "open", "open_id": 1617598035, "open_date": "2021-04-05, 11:47:15", "open_price": 0.72185, "side": "buy", "size": 8.3, "sl": "", "tp": "", "fee": 0.0024, "order_comment": ""}, "XLM-PERP": {"status": "open", "open_id": 1617598036, "open_date": "2021-04-05, 11:47:15", "open_price": 0.4622, "side": "sell", "size": 13.0, "sl": "", "tp": "", "fee": 0.0024, "order_comment": ""}}}
