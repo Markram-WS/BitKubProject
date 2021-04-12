@@ -431,8 +431,8 @@ class main():
         if(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'LONG'):          
             current_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['bid']) * (1-self.fee )
             current_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['ask']) * (1-self.fee )
-            if( self.ticker['bid'] - zone > self.margin + self.slippage):    
-                #---------test---------
+            if( (current_order_sys1-open_order_sys1)+(open_order_sys2-current_order_sys2) > self.margin):    
+                #---------test close order 2---------
                 cbid = self.sys[0].ticker['bid']
                 cask = self.sys[1].ticker['ask']
                 open_amt_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']) 
@@ -504,8 +504,8 @@ class main():
         elif(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'SHORT'):
             current_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['ask']) * (1-self.fee ) 
             current_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['bid']) * (1-self.fee )
-            if(zone - self.ticker['ask'] > self.margin + self.slippage):   
-                #---------test---------
+            if( (open_order_sys1-current_order_sys1)+(current_order_sys2-open_order_sys2) > self.margin): 
+                #---------test close order 2---------
                 cbid = self.sys[0].ticker['ask']
                 cask = self.sys[1].ticker['bid']
                 open_amt_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']) 
@@ -549,7 +549,7 @@ class main():
                 print(f'margin + slippage  {logic_b}')
                 print(f'ticker - zone > margin + slippage {resault}')
                 print('----------------------------------------')
-                #---------test--------- 
+                #---------test---------  
 
                 for i in range(len(self.sys)):
                     price = self.sys[i].ticker['ask'] if self.side[i] == 'LONG' else self.sys[i].ticker['bid']

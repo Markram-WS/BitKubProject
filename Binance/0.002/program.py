@@ -1,8 +1,4 @@
 import time
-import requests 
-import hmac
-import json
-import hashlib
 import numpy as np
 from datetime import datetime
 import pandas as pd
@@ -12,119 +8,152 @@ import threading
 import csv
 #----------
 import configparser
-###############################################################################################
-#-----------------------------------------FTX API---------------------------------------------#
-###############################################################################################
-import time
-import hmac
-from typing import Optional, Dict, Any, List
-from requests import Request, Session, Response
 
-class ftxAPI():
+###############################################################################################
+#----------------------------------------Binance API------------------------------------------#
+###############################################################################################
+import requests 
+import hmac
+import hashlib
+
+class binanceAPI():
     def __init__(self,host,key,secret):
         self._api_host = host
         self._api_key = key
         self._api_secret  = secret
         self.ts = int(time.time() * 1000)
         self._subaccount_name = ""
-        self._session = Session()
+        self.header = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-MBX-APIKEY': self._api_key,
+        }
         
-    def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
-        return self._request('GET', path, params=params)
-    
-    def _post(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
-        return self._request('POST', path, params=params)
-    
-    def _request(self, method: str, path: str, **kwargs) -> Any:
-        request = Request(method, self._api_host + path, **kwargs)
-        self._sign_request(request)
-        response = self._session.send(request.prepare())
-        return self._process_response(response)
+    def _json_encode(self,data):
+        return json.dumps(data, separators=(',', ':'), sort_keys=True)
 
-    def _sign_request(self, request: Request) -> None:
-        self.ts = int(time.time() * 1000)
-        prepared = request.prepare()
-        signature_payload = f'{self.ts}{prepared.method}{prepared.path_url}'.encode()
-        if prepared.body:
-            signature_payload += prepared.body
-        signature = hmac.new(self._api_secret.encode(), signature_payload, 'sha256').hexdigest()
-        request.headers['FTX-KEY'] = self._api_key
-        request.headers['FTX-SIGN'] = signature
-        request.headers['FTX-TS'] = str(self.ts)
-        if self._subaccount_name:
-            request.headers['FTX-SUBACCOUNT'] = urllib.parse.quote(self._subaccount_name)
+    def _sign(self,data):
+        j = self._json_encode(data)
+        h = hmac.new(_api_secret, msg=j.encode(), digestmod=hashlib.sha256)
+        return h.hexdigest()
     
-    def _process_response(self, response: Response) -> Any:
-        try:
-            data = response.json()
-        except ValueError:
-            response.raise_for_status()
-            raise
-        else:
-            if not data['success']:
-                raise Exception(data['error'])
-            return data['result']
+    def _get(self,url,**kwargs ):
+        res = requests.get(self._api_host + url,**kwargs)
+        return json.loads(res.text)
     
+    def _post(self,url,data ):
+        signature = self._sign(data)
+        data['sig'] = signature
+        res = requests.post(self.API_HOST + url, headers=self.header, data=self._json_encode(data))
+        return json.loads(res.text)
+    
+    def server_time(self):
+        res = self._get(f'/fapi/v1/time')
+        return res['serverTime']
     
     def get_ticker(self,market_name):
-        return self._get(f'/markets/{market_name}/orderbook?depth={1}')
-    '''
-        def place_orders(self,market,side,size,price,type_ord):
-            return self._post(f'/orders',{   'market': market,
-                                             'side': side,
-                                             'price': price,
-                                             'size': size,
-                                             'type': type_ord,
-                                         })
-    '''
+        res = self._get(f'/fapi/v1/depth?symbol={market_name}&limit=5')
+        return {'bids':res['bids'][0][0],
+                'bidv':res['bids'][0][1],
+                'asks':res['asks'][0][0],
+                'askv':res['asks'][0][1]}
 
+    def timeframe(self,tf):
+        if(tf==60):
+            return '1m'
+        elif(tf==300):
+            return '5m'
+        elif(tf==900):
+            return '15m'
+        elif(tf==3600):
+            return '1h'
+        elif(tf==86400):
+            return '1d'
+        
+    def timestampToDatetime(self,tm):
+        time_tuple = time.gmtime(tm)
+        return time.strftime("%Y-%m-%d %H:%M:%S", time_tuple)
     
-    def place_conditional_orders(self,market,side,size,type_ord,open_price,tp):
-        return self._post(f'/conditional_orders',{    'market': market, 
-                                                      'side': side,
-                                                      'size': size,
-                                                      'type': type_ord,
-                                                      'triggerPrice':tp,
-                                                      'orderPrice':open_price
-                                                 })
+    def datetimeToTimestamp(self,tm):
+        time_tuple = time.strptime(tm, "%Y-%m-%d %H:%M:%S")
+        return int(time.mktime(time_tuple))
+
+    def exchangeInfo(self):
+        return self._get(f'/fapi/v1/exchangeInfo')
+    
+    def _listToDict_HistoricalPriceFN(self,price_list):
+        price_dict={'time':[],
+                 'open':[],
+                 'high':[],
+                 'low':[],
+                 'close':[],
+                 'volume':[]
+                }
+        for i in price_list:
+            price_dict["time"].append(self.timestampToDatetime(int(i[0])/1000))
+            price_dict["open"].append(float(i[1]))
+            price_dict["high"].append(float(i[2]))
+            price_dict["low"].append(float(i[3]))
+            price_dict["close"].append(float(i[4]))
+            price_dict["volume"].append(float(i[5]))
+        return price_dict
     
     def historicalPrice(self,market_name,resolution,limit,start_time,end_time):
-        return self._get(f'/markets/{market_name}/candles?resolution={resolution}&limit={limit}&start_time={start_time}&end_time={end_time}')
-    
-    def get_open_orders(self,market):
-        return self._get(f'/orders?market={market}')
-    
-    def place_orders(self,market,side,size,price,type_ord):
-        tm = time.localtime() # get struct_time
-        time_string = time.strftime("%Y-%m-%d, %H:%M:%S", tm)
-        tr = self.get_ticker(market)
-        if(side == 'buy'):
-            price = tr['asks'][0][0]
-        else:
-            price = tr['bids'][0][0]
+        try:
+            res = self._get(f'/fapi/v1/klines?symbol={market_name}&interval={self.timeframe(resolution)}&startTime={int(start_time*1000)}&endTime={int(end_time*1000)}&limit={limit}')
+            return self._listToDict_HistoricalPriceFN(res)
+        except:
+            return res
             
-        return {"createdAt": time_string,
-                "filledSize": 0,
-                "future": market,
-                "id": int(time.time()),
-                "market": market,
-                "price": price,
-                "remainingSize": size,
-                "side": side,
-                "size": round(size,2),
-                "status": "open",
-                "type": type_ord,
-              }
+    def historicalPriceCon(self,market_name,resolution,limit,start_time,end_time):
+        try:
+            res = self._get(f'/fapi/v1/continuousKlines?pair={market_name}&contractType=PERPETUAL&interval={self.timeframe(resolution)}&startTime={int(start_time*1000)}&endTime={int(end_time*1000)}&limit={limit}')
+            return self._listToDict_HistoricalPriceFN(res)
+        except:
+            return res
     
-    def get_open_conditional_order(self,market):
-        return self._get(f'/conditional_orders?market={market}')
-    
-    def get_conditional_order(self,conditional_order_id):
-        return self._get(f'/conditional_orders/{conditional_order_id}/triggers')
-
-
-
-
+    def place_orders(self,market,side,positionSide,size,price,type_ord):
+        tm=int(time.time())    
+        data = {'symbol':market,
+                'side'  :side,
+                'positionSide': positionSide,
+                'type':type_ord,
+                'quantity':size,
+                'price'  :price,
+                'timestamp':tm
+                }
+            
+        #res =  self._post(f'/fapi/v1/order ',data)
+        
+        #-----test order-----
+        origQty = data['quantity']
+        res = {
+            "clientOrderId": "testOrder",
+            "cumQty": "0",
+            "cumQuote": "0",
+            "executedQty": "0",
+            "orderId": tm,
+            "avgPrice": "0.00000",
+            "origQty": f"{origQty}",
+            "price": f"{price}",
+            "reduceOnly": 'false',
+            "side": f'{side}',
+            "positionSide": f'{positionSide}',
+            "status": "NEW",
+            "stopPrice": "0",      #please ignore when order type is TRAILING_STOP_MARKET
+            "closePosition": 'false',   #if Close-All
+            "symbol": f"{market}",
+            "timeInForce": "GTC",
+            "type": "MARKET",
+            "origType": "MARKET",
+            "activatePrice": "",    #activation price, only return with TRAILING_STOP_MARKET order
+            "priceRate": "",         #callback rate, only return with TRAILING_STOP_MARKET order
+            "updateTime": self.timestampToDatetime(tm),
+            "workingType": "CONTRACT_PRICE",
+            "priceProtect": 'false'       #if conditional order trigger is protected   
+            }
+        #--------------------
+        return res
 
 ############################################################################################
 #------------------------------------  symbol class   -------------------------------------#
@@ -139,16 +168,17 @@ class symbol():
     def get_ticker(self):
         try:
             ticker = self.API.get_ticker(self.symbol)
-            self.ticker['bid'] = float(ticker['bids'][0][0])
-            self.ticker['bidv'] = float(ticker['bids'][0][1])
-            self.ticker['ask'] = float(ticker['asks'][0][0])
-            self.ticker['askv'] = float(ticker['asks'][0][1])
+            self.ticker['bid'] = float(ticker['bids'])
+            self.ticker['bidv'] = float(ticker['bidv'])
+            self.ticker['ask'] = float(ticker['asks'])
+            self.ticker['askv'] = float(ticker['askv'])
             return True
         except:
             return False
         
+        
     def getHisPrice(self,tf,nbar):
-        price = self.API.historicalPrice(self.symbol,tf,nbar,int(time.time())-(tf*nbar),int(time.time()))
+        price = self.API.historicalPrice(self.symbol,tf,nbar,time.time()-(tf*nbar),time.time())
         self.his_price = pd.DataFrame.from_dict(price)     
         
     def ma(self,type_bar):
@@ -168,10 +198,6 @@ class symbol():
                 )) 
         return np.mean(tr)
 
-
-
-
-
 ###################################################################################
 #---------------------------------  main program  --------------------------------#
 ###################################################################################
@@ -182,7 +208,7 @@ class main():
         config.read('config.ini') 
         
         #API
-        self.API = ftxAPI(
+        self.API = binanceAPI(
             config['API']['host'],
             config['API']['key'].encode(),
             config['API']['secret']
@@ -195,6 +221,8 @@ class main():
         self.fee = float(config['SYSTEM']['fee'])
         self.side = config['SYSTEM']['side'].split(',')
         self.symbol = config['SYSTEM']['symbol'].split(',')
+        self.sys_name   = config['SYSTEM']['name']
+        self.slippage   = float(config['SYSTEM']['slippage'])
         self.order = {}
         self.ticker = {}
         self.zone = 0
@@ -254,7 +282,7 @@ class main():
     
     def hisPrice_init(self):
         for i in range(len(self.sys)):
-            self.sys[i].getHisPrice(self.timeframe * 60,200)
+            self.sys[i].getHisPrice(self.timeframe,100)
         for i in range(len(self.sys)):
             if i == 0: 
                 self.ma = self.sys[i].ma('close')
@@ -270,7 +298,7 @@ class main():
             self.refSec = self.tm.tm_sec
             hisdatas = list()
             for i in range(len(self.sys)):
-                get_hisdata = threading.Thread(target=self.sys[i].getHisPrice, args=[self.timeframe*60, self.period])
+                get_hisdata = threading.Thread(target=self.sys[i].getHisPrice, args=[self.timeframe, self.period])
                 get_hisdata.start()
                 hisdatas.append(get_hisdata)
             for i in hisdatas:
@@ -286,37 +314,46 @@ class main():
                 else:
                     print('getHisPrice function error')
     
-    ########################### open order ###########################             
-    def place_orders_open(self,sym,side,size,price):
-        res = self.API.place_orders(sym,side,size,price,'market')
+    
+    ########################### open order ###########################         
+    #-----place open orders fn------
+    def place_orders_open(self,sym,side,size,price,order_comment):
+        #place_orders('BTCUSDT','BUY','LONG',6,5000,'MARKET')
+        res = self.API.place_orders(sym,'BUY',side,size,price,'MARKET')
+
         return{ 'status':'open',
-                'open_id' : res['id'],
-                'open_date': res['createdAt'],
-                'open_price': res['price'],
+                'orderId' : res['orderId'],
+                'open_date': res['updateTime'],
+                'open_price': float(res['price']),
                 'side':side,
-                'size': res['size'],
+                'size': float(res['origQty']),
                 'sl': '',
                 'tp': '',
-                'fee':round( (res['size']*res['price'])*self.fee ,5),
-                'order_comment':'',
+                'fee':round( (float(res['origQty']) * float(res['price']) )*self.fee ,5),
+                'order_comment':f'{order_comment}',
                 }
-
                         
     #-----long order-----side[i]           
     def long_open_conditon(self):
         #------check short_conditon
-        long_conditon = all([  self.ticker['ask'] <= self.ma,
-                               abs(self.ticker['ask'] - self.zone) < self.margin/500,
+        long_conditon = all([  self.ticker['ask'] < self.ma,
+                               abs(self.ticker['ask'] - self.zone) < self.margin/80,
                                str(self.zone) not in self.order.keys()
                           ])
-        
+
         if(self.time_check() and long_conditon):
             dict_order=list([])
             for i in range(len(self.sys)):
-                price = self.sys[i].ticker['ask'] if self.side[i] == 'buy' else self.sys[i].ticker['bid']
-                dict_order.append(self.place_orders_open(self.sys[i].symbol,self.side[i],self.cal_size(price),price))
+                price = self.sys[i].ticker['ask'] if self.side[i] == 'LONG' else self.sys[i].ticker['bid']
+                #comment
+                comment_askzone = round(self.ticker['ask'],5)
+                comment_ask = round(self.sys[i].ticker['ask'],5)
+                comment_bid = round(self.sys[i].ticker['bid'],5)      
+                comment = f'open:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
+                #place_orders_open
+                dict_order.append(self.place_orders_open(self.sys[i].symbol,self.side[i],self.cal_size(price),price,comment_askzone))
                 
-            print(f' ----------------------------------- open long {self.zone} ----------------------------------- ')
+            print(f' --------------------------------------- open long {self.zone} ---------------------------------------')
             self.order[f'{self.zone}'] = {}
             for i in range(len(self.sys)):
                 self.order[f'{self.zone}'][self.sys[i].symbol] = dict_order[i]
@@ -327,50 +364,56 @@ class main():
     #-----short order-----side[-i]            
     def short_open_conditon(self):
         #------check short_conditon
-        short_conditon = all([    self.ticker['ask'] >= self.ma,
-                               abs(self.ticker['ask'] - self.zone) < self.margin/500,
+        short_conditon = all([    self.ticker['bid'] > self.ma,
+                               abs(self.ticker['bid'] - self.zone) < self.margin/80,
                                str(self.zone) not in self.order.keys()
                           ])
 
         if(self.time_check() and short_conditon):
             dict_order=list([])
             for i in range(len(self.sys)):
-                price = self.sys[i].ticker['ask'] if self.side[-i] == 'buy' else self.sys[i].ticker['bid']
-                dict_order.append(self.place_orders_open(self.sys[i].symbol,self.side[-i],self.cal_size(price),price))
+                price = self.sys[i].ticker['ask'] if self.side[-i] == 'LONG' else self.sys[i].ticker['bid']
+                #comment
+                comment_askzone = round(self.ticker['bid'],5)
+                comment_ask = round(self.sys[i].ticker['ask'],5)
+                comment_bid = round(self.sys[i].ticker['bid'],5)      
+                comment = f'open:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
+                #place_orders_open
+                dict_order.append(self.place_orders_open(self.sys[i].symbol,self.side[-i],self.cal_size(price),price,comment))
                                   
-            print(f' ----------------------------------- open short {self.zone} ----------------------------------- ')
+            print(f' --------------------------------------- open short {self.zone} ---------------------------------------')
             self.order[f'{self.zone}'] = {}
             for i in range(len(self.sys)):
                 self.order[f'{self.zone}'][self.sys[i].symbol] = dict_order[i]
                 print(dict_order[i])
             self.save_order()
             print('')
-
-            
+        
     ########################### close_order ###########################       
-    #-----place orders------
-    def place_orders_close(self,sym,side,size,price,zone,comment):
-        res = self.API.place_orders(sym,side,size,price,'market')
+    #-----place close orders fn------
+    def place_orders_close(self,sym,side,size,price,zone,order_comment):
+        #place_orders('BTCUSDT','BUY','LONG',6,5000,'MARKET')
+        res = self.API.place_orders(sym,'SELL',side,size,price,'MARKET')
         self.order[f'{zone}'][sym]['status'] = 'close'
-        self.order[f'{zone}'][sym]['close_id'] = res["id"]
-        self.order[f'{zone}'][sym]['close_date'] = res["createdAt"]
+        self.order[f'{zone}'][sym]['close_id'] = res["orderId"]
+        self.order[f'{zone}'][sym]['close_date'] = res["updateTime"]
         self.order[f'{zone}'][sym]['close_price'] = res["price"]
-        close_val = res["price"]*self.order[f'{zone}'][sym]['size']                                 #USDT
+        close_val = float(res["price"])*float(self.order[f'{zone}'][sym]['size'])                   #USDT
         open_val = self.order[f'{zone}'][sym]['size'] * self.order[f'{zone}'][sym]['open_price']    #USDT
         self.order[f'{zone}'][sym]['fee'] = self.order[f'{zone}'][sym]['fee'] + (close_val * self.fee)
         
         #calculate order_profit
-        if(self.order[f'{zone}'][sym]['side']=='buy'):
+        if(self.order[f'{zone}'][sym]['side']=='LONG'):
             self.order[f'{zone}'][sym]['order_profit'] = close_val - open_val - self.order[f'{zone}'][sym]['fee'] 
-        elif(self.order[f'{zone}'][sym]['side']=='sell'):
+        elif(self.order[f'{zone}'][sym]['side']=='SHORT'):
             self.order[f'{zone}'][sym]['order_profit'] = open_val - close_val - self.order[f'{zone}'][sym]['fee'] 
         else:
             print('error calculate order_profit')
             print('')
             self.system = False
             
-        
-        self.order[f'{zone}'][sym]['order_comment'] = f'close {comment}'
+     
+        self.order[f'{zone}'][sym]['order_comment'] = f'{order_comment}'
         self.order[f'{zone}'][sym]['zone'] = zone
         return self.order[f'{zone}'][sym]
         
@@ -381,62 +424,152 @@ class main():
         zone = float(zone)
         #---conditon long---
         open_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']) - self.order[f'{zone}'][self.sys[0].symbol]['fee']
-        open_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']) - self.order[f'{zone}'][self.sys[0].symbol]['fee']
+        open_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']) - self.order[f'{zone}'][self.sys[1].symbol]['fee']
         zProfit = 0  
         conditon_close=False
         #-------------------
-        if(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'buy'):          
+        if(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'LONG'):          
             current_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['bid']) * (1-self.fee )
             current_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['ask']) * (1-self.fee )
-            if((current_order_sys1-open_order_sys1) + (open_order_sys2-current_order_sys2) >= self.margin and  self.ticker['bid'] - zone > self.margin):       
+            if( self.ticker['bid'] - zone > self.margin + self.slippage):    
+                #---------test---------
+                cbid = self.sys[0].ticker['bid']
+                cask = self.sys[1].ticker['ask']
+                open_amt_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']) 
+                open_amt_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']) 
+                open_fee_sys1 = self.order[f'{zone}'][self.sys[0].symbol]['fee']
+                open_fee_sys2 = self.order[f'{zone}'][self.sys[1].symbol]['fee']
+
+                close_amt_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['bid'])
+                close_amt_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['ask']) 
+                close_fee_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['bid'])*self.fee
+                close_fee_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['ask']) * self.fee
+                current_price = self.ticker['bid'] 
+                logic_a = self.ticker['bid'] - zone 
+                logic_b = self.margin + self.slippage
+                resault = logic_a > logic_b
+                print('')
+                print(f'close bid {cbid} <---')   
+                print(f'close ask {cask}')  
+                print('----------------------------------------')
+                print(f'open_amt_sys1 {open_amt_sys1}')  
+                print(f'open_amt_sys2 {open_amt_sys2}')  
+                print(f'open_fee_sys1 {open_fee_sys1}')  
+                print(f'open_fee_sys2 {open_fee_sys2}')
+                print('')
+                print(f'open_order_sys1 {open_order_sys1}')    
+                print(f'open_order_sys2 {open_order_sys2}')   
+                print('----------------------------------------')
+                print(f'close_amt_sys1 {close_amt_sys1}')  
+                print(f'close_amt_sys2 {close_amt_sys2}')  
+                print(f'close_fee_sys1 {close_fee_sys1}')  
+                print(f'close_fee_sys2 {close_fee_sys2}')  
+                print('')
+                print(f'current_order_sys1 {current_order_sys1}')  
+                print(f'current_order_sys2 {current_order_sys2}')   
+                print('----------------------------------------')
+                print(f'ticker {current_price}')
+                print(f'zone {zone}')
+                print(f'margin {self.margin}')
+                print(f'slippage {self.slippage}')
+                print(f'ticker - zone  {logic_a}')
+                print(f'margin + slippage  {logic_b}')
+                print(f'ticker - zone > margin + slippage {resault}')
+                print('----------------------------------------')
+                #---------test---------
+
                 dict_order=list([])            
                 for i in range(len(self.sys)):
-                    price = self.sys[i].ticker['ask'] if self.side[-i] == 'buy' else self.sys[i].ticker['bid']
-                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[-i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price,zone,price))
+                    price = self.sys[i].ticker['ask'] if self.side[-i] == 'LONG' else self.sys[i].ticker['bid']
+                    #comment
+                    comment_askzone = round(self.ticker['ask'],5)
+                    comment_ask = round(self.sys[i].ticker['ask'],5)
+                    comment_bid = round(self.sys[i].ticker['bid'],5)      
+                    comment = self.order[f'{zone}'][self.sys[i].symbol]['order_comment'] + f'| close:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
+                    #place_orders_close
+                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[-i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price,zone,comment))
                     #cal zProfit
                     zProfit = zProfit + dict_order[i]['order_profit']
-                print(f' ----------------------------------- close long order ----------------------------------- ')
+                print(f' --------------------------------------- close long order ---------------------------------------')
                 for i in range(len(self.sys)):
                     dict_order[i]['zone_profit']=zProfit
                     self.write_log(dict_order[i])
                     print(dict_order[i])
+                print('')
                 #SAVE LOG
                 del self.order[f'{zone}']
                 self.save_order()
-                #---test---
-                print('-------test--------')
-                bid=self.ticker['bid']
-                ask=self.ticker['ask']
-                print(f'open sys1{open_order_sys1}, sys2{open_order_sys2}')
-                print(f'current sys1{current_order_sys1}, sys2{current_order_sys2}')
-                print(f'ask{ask}, bid{bid}')
-                print('')
             
         #-----CLOSE SHORT
-        elif(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'sell'):
-            current_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['ask']) * (1-self.fee )
+        elif(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'SHORT'):
+            current_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['ask']) * (1-self.fee ) 
             current_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['bid']) * (1-self.fee )
-            if((open_order_sys1-current_order_sys1) + (current_order_sys2-open_order_sys2) >= self.margin and zone-self.ticker['ask']  > self.margin):    
+            if(zone - self.ticker['ask'] > self.margin + self.slippage):   
+                #---------test---------
+                cbid = self.sys[0].ticker['ask']
+                cask = self.sys[1].ticker['bid']
+                open_amt_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']) 
+                open_amt_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']) 
+                open_fee_sys1 = self.order[f'{zone}'][self.sys[0].symbol]['fee']
+                open_fee_sys2 = self.order[f'{zone}'][self.sys[1].symbol]['fee']
+
+                close_amt_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['ask'])
+                close_amt_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['bid']) 
+                close_fee_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['ask']) * self.fee
+                close_fee_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['bid']) * self.fee
+                current_price = self.ticker['ask'] 
+                logic_a = zone - self.ticker['ask'] 
+                logic_b = self.margin + self.slippage
+                resault = logic_a > logic_b
+                print('')
+                print(f'close bid {cbid}')   
+                print(f'close ask {cask}<---')  
+                print('----------------------------------------')
+                print(f'open_amt_sys1 {open_amt_sys1}')  
+                print(f'open_amt_sys2 {open_amt_sys2}')  
+                print(f'open_fee_sys1 {open_fee_sys1}')  
+                print(f'open_fee_sys2 {open_fee_sys2}')
+                print('')
+                print(f'open_order_sys1 {open_order_sys1}')    
+                print(f'open_order_sys2 {open_order_sys2}')   
+                print('----------------------------------------')
+                print(f'close_amt_sys1 {close_amt_sys1}')  
+                print(f'close_amt_sys2 {close_amt_sys2}')  
+                print(f'close_fee_sys1 {close_fee_sys1}')  
+                print(f'close_fee_sys2 {close_fee_sys2}')  
+                print('')
+                print(f'current_order_sys1 {current_order_sys1}')  
+                print(f'current_order_sys2 {current_order_sys2}')   
+                print('----------------------------------------')
+                print(f'ticker {current_price}')
+                print(f'zone {zone}')
+                print(f'margin {self.margin}')
+                print(f'slippage {self.slippage}')
+                print(f'ticker - zone  {logic_a}')
+                print(f'margin + slippage  {logic_b}')
+                print(f'ticker - zone > margin + slippage {resault}')
+                print('----------------------------------------')
+                #---------test--------- 
+
                 for i in range(len(self.sys)):
-                    price = self.sys[i].ticker['ask'] if self.side[i] == 'buy' else self.sys[i].ticker['bid']
-                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price,zone,price))
+                    price = self.sys[i].ticker['ask'] if self.side[i] == 'LONG' else self.sys[i].ticker['bid']
+                    #comment
+                    comment_askzone = round(self.ticker['ask'],5)
+                    comment_ask = round(self.sys[i].ticker['ask'],5)
+                    comment_bid = round(self.sys[i].ticker['bid'],5)      
+                    comment = self.order[f'{zone}'][self.sys[i].symbol]['order_comment'] + f'| close:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
+                    #place_orders_close
+                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price,zone,comment))
                     #cal zProfit
                     zProfit = zProfit + dict_order[i]['order_profit'] 
-                print(f' ----------------------------------- close short order ----------------------------------- ')
+                print(f' --------------------------------------- close short order ---------------------------------------')
                 for i in range(len(self.sys)):
                     dict_order[i]['zone_profit']=zProfit
                     self.write_log(dict_order[i])
                     print(dict_order[i])
+                print('')
                 del self.order[f'{zone}']
                 self.save_order()
-                #---test---
-                print('-------test--------')
-                bid=self.ticker['bid']
-                ask=self.ticker['ask']
-                print(f'open sys1{open_order_sys1}, sys2{open_order_sys2}')
-                print(f'current sys1{current_order_sys1}, sys2{current_order_sys2}')
-                print(f'ask{ask}, bid{bid}')
-                print('')
                 
     #-----operation------
     def close_order(self):
@@ -461,8 +594,6 @@ class main():
                 
     ########################### start ###########################   
     def start(self):
-        #try:
-
         try:
             #get_ticker
             self.api_connect = all([self.sys[i].get_ticker() for i in range(len(self.sys))])
@@ -477,7 +608,6 @@ class main():
             thr_getHisPrice.start()
         except:
             self.api_connect=False
-
 
         if(self.api_connect):
             #cal zone
@@ -500,14 +630,12 @@ class main():
             self.close_order()
             
             ask  = self.ticker['ask']
-            print(f'{self.sys[0].symbol}/{self.sys[1].symbol}:{self.margin} zone:{self.zone} ask:{ask} ma:{self.ma} {self.time_string}  timeout:{self.timeout}  ',end='\r')
+            print(f'{self.sys[0].symbol}/{self.sys[1].symbol}:{self.sys_name} zone:{self.zone} ask:{ask} ma:{self.ma} {self.time_string}  timeout:{self.timeout}  ',end='\r')
         else:           
-            print(f'{self.margin} connection failed {self.time_string}                                                                                          ',end='\r')
-            
+            print(f'{self.sys_name} connection failed {self.time_string}                                                                                          ',end='\r')
 
 program = main()
 program.load_order()
-
 while(program.system):
     program.start()
     time.sleep(0)
