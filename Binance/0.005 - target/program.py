@@ -320,7 +320,7 @@ class main():
     def place_orders_open(self,sym,side,size,price,order_comment):
         #place_orders('BTCUSDT','BUY','LONG',6,5000,'MARKET')
         res = self.API.place_orders(sym,'BUY',side,size,price,'MARKET')
-
+        print(f'sym {sym}, side {side}, price {price}')
         return{ 'status':'open',
                 'orderId' : res['orderId'],
                 'open_date': res['updateTime'],
@@ -419,75 +419,38 @@ class main():
         
     #-----process close_order---------
 
-    #-----CLOSE LONG
+    #-----CLOSE ORDER------
     def process_closeOrder(self,zone):
         zone = float(zone)
-        #---conditon long---
-        open_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']) - self.order[f'{zone}'][self.sys[0].symbol]['fee']
-        open_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']) - self.order[f'{zone}'][self.sys[1].symbol]['fee']
+        fee=0
+        open_order_sys1 = self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']
+        open_order_sys2 = self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']
+        fee = self.order[f'{zone}'][self.sys[0].symbol]['fee'] + self.order[f'{zone}'][self.sys[1].symbol]['fee']
         zProfit = 0  
         conditon_close=False
-        #-------------------
-        if(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'LONG'):          
-            current_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['bid']) * (1-self.fee )
-            current_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['ask']) * (1-self.fee )
-            if( (current_order_sys1-open_order_sys1)+(open_order_sys2-current_order_sys2) > self.margin):    
-                #---------test close order 2---------
-                cbid = self.sys[0].ticker['bid']
-                cask = self.sys[1].ticker['ask']
-                open_amt_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']) 
-                open_amt_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']) 
-                open_fee_sys1 = self.order[f'{zone}'][self.sys[0].symbol]['fee']
-                open_fee_sys2 = self.order[f'{zone}'][self.sys[1].symbol]['fee']
-
-                close_amt_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['bid'])
-                close_amt_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['ask']) 
-                close_fee_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['bid'])*self.fee
-                close_fee_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['ask']) * self.fee
-                current_price = self.ticker['bid'] 
-                logic_a = self.ticker['bid'] - zone 
-                logic_b = self.margin + self.slippage
-                resault = logic_a > logic_b
-                print('')
-                print(f'close bid {cbid} <---')   
-                print(f'close ask {cask}')  
-                print('----------------------------------------')
-                print(f'open_amt_sys1 {open_amt_sys1}')  
-                print(f'open_amt_sys2 {open_amt_sys2}')  
-                print(f'open_fee_sys1 {open_fee_sys1}')  
-                print(f'open_fee_sys2 {open_fee_sys2}')
-                print('')
-                print(f'open_order_sys1 {open_order_sys1}')    
-                print(f'open_order_sys2 {open_order_sys2}')   
-                print('----------------------------------------')
-                print(f'close_amt_sys1 {close_amt_sys1}')  
-                print(f'close_amt_sys2 {close_amt_sys2}')  
-                print(f'close_fee_sys1 {close_fee_sys1}')  
-                print(f'close_fee_sys2 {close_fee_sys2}')  
-                print('')
-                print(f'current_order_sys1 {current_order_sys1}')  
-                print(f'current_order_sys2 {current_order_sys2}')   
-                print('----------------------------------------')
-                print(f'ticker {current_price}')
-                print(f'zone {zone}')
-                print(f'margin {self.margin}')
-                print(f'slippage {self.slippage}')
-                print(f'ticker - zone  {logic_a}')
-                print(f'margin + slippage  {logic_b}')
-                print(f'ticker - zone > margin + slippage {resault}')
-                print('----------------------------------------')
-                #---------test---------
-
+        #-----CLOSE LONG
+        if(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'LONG'):      
+            price = [self.sys[0].ticker['bid'],self.sys[1].ticker['ask']] 
+            current_order_sys1 = ((self.order[f'{zone}'][self.sys[0].symbol]['size'] * price[0]) )
+            current_order_sys2 = ((self.order[f'{zone}'][self.sys[1].symbol]['size'] * price[1]) )
+            fee = fee + (current_order_sys1 * self.fee)#fee ord 0
+            fee = fee + (current_order_sys2 * self.fee)#fee ord 1
+            conditon_close = (current_order_sys1 - open_order_sys1) + (open_order_sys2-current_order_sys2) > self.margin + self.slippage + fee
+            if(conditon_close): 
+                #------------test--------------
+                print(f'ord1:{(current_order_sys1 - open_order_sys1) }, ord2:{(open_order_sys2 - current_order_sys2) } ans:{conditon_close}')
+                print(f'price:{price}')
+                print(f'fee:{fee}')
+                #------------test--------------
                 dict_order=list([])            
                 for i in range(len(self.sys)):
-                    price = self.sys[i].ticker['ask'] if self.side[-i] == 'LONG' else self.sys[i].ticker['bid']
                     #comment
                     comment_askzone = round(self.ticker['ask'],5)
                     comment_ask = round(self.sys[i].ticker['ask'],5)
                     comment_bid = round(self.sys[i].ticker['bid'],5)      
                     comment = self.order[f'{zone}'][self.sys[i].symbol]['order_comment'] + f'| close:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
                     #place_orders_close
-                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[-i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price,zone,comment))
+                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[-i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price[i],zone,comment))
                     #cal zProfit
                     zProfit = zProfit + dict_order[i]['order_profit']
                 print(f' --------------------------------------- close long order ---------------------------------------')
@@ -500,66 +463,23 @@ class main():
                 del self.order[f'{zone}']
                 self.save_order()
             
-        #-----CLOSE SHORT
+        #---CLOSE SHORT
         elif(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'SHORT'):
-            current_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['ask']) * (1-self.fee ) 
-            current_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['bid']) * (1-self.fee )
-            if( (open_order_sys1-current_order_sys1)+(current_order_sys2-open_order_sys2) > self.margin): 
-                #---------test close order 2---------
-                cbid = self.sys[0].ticker['ask']
-                cask = self.sys[1].ticker['bid']
-                open_amt_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']) 
-                open_amt_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']) 
-                open_fee_sys1 = self.order[f'{zone}'][self.sys[0].symbol]['fee']
-                open_fee_sys2 = self.order[f'{zone}'][self.sys[1].symbol]['fee']
-
-                close_amt_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['ask'])
-                close_amt_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['bid']) 
-                close_fee_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.sys[0].ticker['ask']) * self.fee
-                close_fee_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.sys[1].ticker['bid']) * self.fee
-                current_price = self.ticker['ask'] 
-                logic_a = zone - self.ticker['ask'] 
-                logic_b = self.margin + self.slippage
-                resault = logic_a > logic_b
-                print('')
-                print(f'close bid {cbid}')   
-                print(f'close ask {cask}<---')  
-                print('----------------------------------------')
-                print(f'open_amt_sys1 {open_amt_sys1}')  
-                print(f'open_amt_sys2 {open_amt_sys2}')  
-                print(f'open_fee_sys1 {open_fee_sys1}')  
-                print(f'open_fee_sys2 {open_fee_sys2}')
-                print('')
-                print(f'open_order_sys1 {open_order_sys1}')    
-                print(f'open_order_sys2 {open_order_sys2}')   
-                print('----------------------------------------')
-                print(f'close_amt_sys1 {close_amt_sys1}')  
-                print(f'close_amt_sys2 {close_amt_sys2}')  
-                print(f'close_fee_sys1 {close_fee_sys1}')  
-                print(f'close_fee_sys2 {close_fee_sys2}')  
-                print('')
-                print(f'current_order_sys1 {current_order_sys1}')  
-                print(f'current_order_sys2 {current_order_sys2}')   
-                print('----------------------------------------')
-                print(f'ticker {current_price}')
-                print(f'zone {zone}')
-                print(f'margin {self.margin}')
-                print(f'slippage {self.slippage}')
-                print(f'ticker - zone  {logic_a}')
-                print(f'margin + slippage  {logic_b}')
-                print(f'ticker - zone > margin + slippage {resault}')
-                print('----------------------------------------')
-                #---------test---------  
-
+            price = [self.sys[0].ticker['ask'],self.sys[1].ticker['bid']] 
+            current_order_sys1 = ((self.order[f'{zone}'][self.sys[0].symbol]['size'] * price[0]) )
+            current_order_sys2 = ((self.order[f'{zone}'][self.sys[1].symbol]['size'] * price[1]) )
+            fee = fee + (current_order_sys1 * self.fee)#fee ord 0
+            fee = fee + (current_order_sys2 * self.fee)#fee ord 1
+            conditon_close = (open_order_sys1 - current_order_sys1) + (current_order_sys2-open_order_sys2) > self.margin + self.slippage + fee
+            if(conditon_close): 
                 for i in range(len(self.sys)):
-                    price = self.sys[i].ticker['ask'] if self.side[i] == 'LONG' else self.sys[i].ticker['bid']
                     #comment
                     comment_askzone = round(self.ticker['ask'],5)
                     comment_ask = round(self.sys[i].ticker['ask'],5)
                     comment_bid = round(self.sys[i].ticker['bid'],5)      
                     comment = self.order[f'{zone}'][self.sys[i].symbol]['order_comment'] + f'| close:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
                     #place_orders_close
-                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price,zone,comment))
+                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price[i],zone,comment))
                     #cal zProfit
                     zProfit = zProfit + dict_order[i]['order_profit'] 
                 print(f' --------------------------------------- close short order ---------------------------------------')

@@ -113,7 +113,7 @@ class binanceAPI():
             return res
     
     def place_orders(self,market,side,positionSide,size,price,type_ord):
-        tm=int(time.time())    
+        tm=int(time.time()*1000)    
         data = {'symbol':market,
                 'side'  :side,
                 'positionSide': positionSide,
@@ -123,9 +123,10 @@ class binanceAPI():
                 'timestamp':tm
                 }
             
-        #res =  self._post(f'/fapi/v1/order ',data)
+        res =  self._post(f'/fapi/v1/order ',data)
         
         #-----test order-----
+        '''
         origQty = data['quantity']
         res = {
             "clientOrderId": "testOrder",
@@ -152,8 +153,17 @@ class binanceAPI():
             "workingType": "CONTRACT_PRICE",
             "priceProtect": 'false'       #if conditional order trigger is protected   
             }
+        '''
         #--------------------
         return res
+
+    def query_limit_orders(self,symbol):
+        tm=int(time.time()*1000)     
+        return self._get(f'/fapi/v1/openOrders?symbol={symbol}&timestamp={tm}')
+
+    def query_order(self,symbol,orderId):
+        tm=int(time.time()*1000)    
+        return self._get(f'/fapi/v1/openOrders?symbol={symbol}&orderId={orderId}&timestamp={tm}')
 
 ############################################################################################
 #------------------------------------  symbol class   -------------------------------------#
@@ -224,6 +234,7 @@ class main():
         self.sys_name   = config['SYSTEM']['name']
         self.slippage   = float(config['SYSTEM']['slippage'])
         self.order = {}
+        self.open_order = []
         self.ticker = {}
         self.zone = 0
         self.system = True
@@ -263,11 +274,39 @@ class main():
     def load_order (self):
         if(os.path.isfile('data.json') == True):
             with open('data.json') as infile:
-                self.order = json.load(infile)   
+                self.order = json.load(infile)     
             
     def save_order(self): 
         with open('data.json', 'w') as outfile: 
             json.dump(self.order, outfile)
+
+    def save_open_order(self): 
+        with open('open_order.json', 'w') as outfile: 
+            json.dump(self.open_order, outfile)
+
+    def load_open_order(self):
+        if(os.path.isfile('open_order.json') == True):
+            with open('open_order.json') as infile:
+                self.open_order = json.load(infile)  
+
+    def get_open_order(self):#initialize function #dev
+        #get order from json
+        self.load_open_order()
+        orders_server = dict([])
+        #get order from server
+        for i in range(len(self.sys)):
+            order_get=self.query_limit_orders(self.sys[i].symbol)
+            for order in order_get:
+                orders_server.append(order)#list order server
+        #compare order server with json
+        for i in self.open_order.keys():
+            for j in self.open_order[i]:
+                if self.open_order[i][f'{j}']["status"] =='open':
+                    close_id = self.open_order[i][f'{j}']["close_id"] 
+                    if close_id not in orders_server:
+                        self.open_order[i][f'{j}']["status"] =='close'
+                        print(f'----Match {i} order {close_id}----')
+                        print(self.open_order[i][f'{close_id}'])
 
     ########################### order #############################
     def cal_size(self,price):
@@ -320,7 +359,6 @@ class main():
     def place_orders_open(self,sym,side,size,price,order_comment):
         #place_orders('BTCUSDT','BUY','LONG',6,5000,'MARKET')
         res = self.API.place_orders(sym,'BUY',side,size,price,'MARKET')
-        print(f'sym {sym}, side {side}, price {price}')
         return{ 'status':'open',
                 'orderId' : res['orderId'],
                 'open_date': res['updateTime'],
@@ -352,8 +390,9 @@ class main():
                 comment = f'open:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
                 #place_orders_open
                 dict_order.append(self.place_orders_open(self.sys[i].symbol,self.side[i],self.cal_size(price),price,comment_askzone))
-                
-            print(f' --------------------------------------- open long {self.zone} ---------------------------------------')
+
+            print(f'                                                                                                                                              ',end='\r')
+            print(f' ----- open long {self.zone} ----- ',end='\r')
             self.order[f'{self.zone}'] = {}
             for i in range(len(self.sys)):
                 self.order[f'{self.zone}'][self.sys[i].symbol] = dict_order[i]
@@ -380,8 +419,9 @@ class main():
                 comment = f'open:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
                 #place_orders_open
                 dict_order.append(self.place_orders_open(self.sys[i].symbol,self.side[-i],self.cal_size(price),price,comment))
-                                  
-            print(f' --------------------------------------- open short {self.zone} ---------------------------------------')
+
+            print(f'                                                                                                                                              ',end='\r')                    
+            print(f' ----- open short {self.zone} ----- ',end='\r')
             self.order[f'{self.zone}'] = {}
             for i in range(len(self.sys)):
                 self.order[f'{self.zone}'][self.sys[i].symbol] = dict_order[i]
@@ -389,11 +429,40 @@ class main():
             self.save_order()
             print('')
         
-    ########################### close_order ###########################       
+    ########################### close_order ###########################    
+    def check_match_order(self):#dev
+        for zone in self.open_order.keys():
+            status_order = list([])
+            for sym in self.open_order[zone].keys():#select zone
+                if self.open_order[zone][sym]["status"] =='open':#select sym status open
+                    close_id = self.open_order[zone][sym]["close_id"] 
+                    close_price = self.open_order[zone][sym]["close_price"] 
+                    date = self.open_order[zone][sym]["close_date"] 
+                    zone_profit = self.open_order[zone][sym]["zone_profit"] 
+                    query_order = self.query_order(sym,close_id)
+                    if query_order["status"] == 'XXXXX': #match response
+                        print(f'                                                                                                                                              ',end='\r')
+                        print(f' ----- order match {zone} {sym} id:{close_id} price:{close_price} {date}')
+                        print('')
+                        status_order.append(True)  
+                    else:
+                        status_order.append(False)  
+                else:
+                    status_order.append(True) 
+
+            if all(status_order):
+                print(f'----- close order {zone} {zone_profit} {date} ----- ')
+                print('')
+                for sym in self.open_order[zone].keys():#select zone
+                    self.write_log(self.open_order[zone][sym])
+                del self.open_order[zone]
+                self.save_open_order() 
+     
+       
     #-----place close orders fn------
-    def place_orders_close(self,sym,side,size,price,zone,order_comment):
+    def close_order_place_order(self,sym,side,size,price,zone,order_comment):
         #place_orders('BTCUSDT','BUY','LONG',6,5000,'MARKET')
-        res = self.API.place_orders(sym,'SELL',side,size,price,'MARKET')
+        res = self.API.place_orders(sym,'SELL',side,size,price,'MARKET')#order type
         self.order[f'{zone}'][sym]['status'] = 'close'
         self.order[f'{zone}'][sym]['close_id'] = res["orderId"]
         self.order[f'{zone}'][sym]['close_date'] = res["updateTime"]
@@ -416,9 +485,43 @@ class main():
         self.order[f'{zone}'][sym]['order_comment'] = f'{order_comment}'
         self.order[f'{zone}'][sym]['zone'] = zone
         return self.order[f'{zone}'][sym]
-        
-    #-----process close_order---------
 
+    #-----log close orders fn------
+    #dev
+    def close_order_manage_orders(self,zone):
+        z_num = 0
+        zProfit = 0
+        for sym in self.order[f'{zone}'].keys():
+            zProfit = zProfit +  self.order[f'{zone}'][sym]['order_profit'] 
+
+        if f'{zone}' not in self.open_order.keys():
+            for sym in self.order[f'{zone}'].keys():
+                self.order[f'{zone}'][sym]['zone_profit']=zProfit
+                close_id = self.order[f'{zone}'][sym]['close_id']
+                close_price = self.order[f'{zone}'][sym]['close_price']
+                print(f'----- send order {zone} {sym} id:{close_id} price:{close_price}')
+                self.open_order[f'{zone}'][sym] = self.order[f'{zone}'][sym]
+                del self.order[f'{zone}']
+        else:
+            while z_num>100:
+                if f'{zone}({z_num})' in self.open_order[f'{zone}'].keys():
+                    for sym in self.order[f'{zone}'].keys():
+                        self.order[f'{zone}'][sym]['zone_profit']=zProfit
+                        self.open_order[f'{zone}({z_num})'][sym] = self.order[f'{zone}'][sym]
+                        close_id = self.order[f'{zone}'][sym]['close_id']
+                        close_price = self.order[f'{zone}'][sym]['close_price']
+                        print(f' ----- send order {zone}({z_num}) {sym} id:{close_id} price:{close_price}')
+                        del self.order[f'{zone}']
+                    break
+                else:
+                    z_num  = z_num + 1
+                    if(z_num>10):
+                        print(f'warning duplicate zone {zone}-{z_num}')
+        self.save_open_order()
+        self.save_order()
+        print('')
+
+    #-----process close_order---------
     #-----CLOSE ORDER------
     def process_closeOrder(self,zone):
         zone = float(zone)
@@ -426,7 +529,6 @@ class main():
         open_order_sys1 = self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']
         open_order_sys2 = self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']
         fee = self.order[f'{zone}'][self.sys[0].symbol]['fee'] + self.order[f'{zone}'][self.sys[1].symbol]['fee']
-        zProfit = 0  
         conditon_close=False
         #-----CLOSE LONG
         if(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'LONG'):      
@@ -450,18 +552,10 @@ class main():
                     comment_bid = round(self.sys[i].ticker['bid'],5)      
                     comment = self.order[f'{zone}'][self.sys[i].symbol]['order_comment'] + f'| close:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
                     #place_orders_close
-                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[-i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price[i],zone,comment))
-                    #cal zProfit
-                    zProfit = zProfit + dict_order[i]['order_profit']
-                print(f' --------------------------------------- close long order ---------------------------------------')
-                for i in range(len(self.sys)):
-                    dict_order[i]['zone_profit']=zProfit
-                    self.write_log(dict_order[i])
-                    print(dict_order[i])
-                print('')
-                #SAVE LOG
-                del self.order[f'{zone}']
-                self.save_order()
+                    self.close_order_place_order(self.sys[i].symbol,self.side[i],self.cal_size(price),price[i],comment_askzone)
+                print(f'                                                                                                                                              ',end='\r')
+                print(f' ----- close long order {zone} -----')
+                self.close_order_manage_orders(zone)
             
         #---CLOSE SHORT
         elif(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'SHORT'):
@@ -479,17 +573,12 @@ class main():
                     comment_bid = round(self.sys[i].ticker['bid'],5)      
                     comment = self.order[f'{zone}'][self.sys[i].symbol]['order_comment'] + f'| close:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
                     #place_orders_close
-                    dict_order.append(self.place_orders_close(self.sys[i].symbol,self.side[i],self.order[f'{zone}'][self.sys[i].symbol]['size'],price[i],zone,comment))
-                    #cal zProfit
-                    zProfit = zProfit + dict_order[i]['order_profit'] 
-                print(f' --------------------------------------- close short order ---------------------------------------')
-                for i in range(len(self.sys)):
-                    dict_order[i]['zone_profit']=zProfit
-                    self.write_log(dict_order[i])
-                    print(dict_order[i])
-                print('')
-                del self.order[f'{zone}']
-                self.save_order()
+                    self.close_order_place_order(self.sys[i].symbol,self.side[i],self.cal_size(price),price[i],comment_askzone)
+                print(f'                                                                                                                                              ',end='\r')
+                print(f' ----- close short order {zone} ----- ')
+                self.close_order_manage_orders(zone)
+
+
                 
     #-----operation------
     def close_order(self):
