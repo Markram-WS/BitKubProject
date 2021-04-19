@@ -157,14 +157,18 @@ class binanceAPI():
         #--------------------
         return res
 
-    def query_limit_orders(self,symbol):
+    def query_all_open_orders(self,symbol):
         tm=int(time.time()*1000)     
         return self._get(f'/fapi/v1/openOrders?symbol={symbol}&timestamp={tm}')
 
-    def query_order(self,symbol,orderId):
+    def query_open_order(self,symbol,orderId):
         tm=int(time.time()*1000)    
         return self._get(f'/fapi/v1/openOrders?symbol={symbol}&orderId={orderId}&timestamp={tm}')
 
+    def query_order(self,symbol,orderId):
+        tm=int(time.time()*1000)    
+        return self._get(f'/fapi/v1/order?symbol={symbol}&orderId={orderId}&timestamp={tm}')
+        
 ############################################################################################
 #------------------------------------  symbol class   -------------------------------------#
 ############################################################################################
@@ -289,24 +293,32 @@ class main():
             with open('open_order.json') as infile:
                 self.open_order = json.load(infile)  
 
-    def get_open_order(self):#initialize function #dev
+    def initialize_open_order(self):#initialize function #dev
         #get order from json
         self.load_open_order()
-        orders_server = dict([])
+        orders_server = list([])
         #get order from server
         for i in range(len(self.sys)):
-            order_get=self.query_limit_orders(self.sys[i].symbol)
+            order_get=self.query_all_open_orders(self.sys[i].symbol)
             for order in order_get:
                 orders_server.append(order)#list order server
         #compare order server with json
-        for i in self.open_order.keys():
-            for j in self.open_order[i]:
-                if self.open_order[i][f'{j}']["status"] =='open':
-                    close_id = self.open_order[i][f'{j}']["close_id"] 
+        for zone in self.open_order.keys():
+            for sys in self.open_order[f'{zone}']:
+                if self.open_order[zone][f'{sys}']["status"] =='open':
+                    close_id = self.open_order[f'{zone}'][f'{sys}']["close_id"] 
                     if close_id not in orders_server:
-                        self.open_order[i][f'{j}']["status"] =='close'
-                        print(f'----Match {i} order {close_id}----')
-                        print(self.open_order[i][f'{close_id}'])
+                        #get close order 
+                        sym = self.open_order[zone][f'{sys}']['symbol']
+                        cOrder = self.API.query_order(sym,close_id)
+                        #update order
+                        self.open_order[zone][sym]["close_price"] = cOrder['price']
+                        self.open_order[zone][sym]["close_date"] = cOrder["updateTime"]
+                        self.open_order[f'{zone}'][f'{sys}']["status"] =='close'
+                        close_price = self.open_order[zone][f'{sys}']['close_price']
+                        close_date = self.open_order[zone][f'{sys}']['close_date']
+                        print(f' ----- order match {zone} {sym} id:{close_id} price:{close_price} {close_date}')
+                        
 
     ########################### order #############################
     def cal_size(self,price):
@@ -431,30 +443,36 @@ class main():
         
     ########################### close_order ###########################    
     def check_match_order(self):#dev
+        #check open_order 
         for zone in self.open_order.keys():
             status_order = list([])
             for sym in self.open_order[zone].keys():#select zone
                 if self.open_order[zone][sym]["status"] =='open':#select sym status open
                     close_id = self.open_order[zone][sym]["close_id"] 
-                    close_price = self.open_order[zone][sym]["close_price"] 
-                    date = self.open_order[zone][sym]["close_date"] 
-                    zone_profit = self.open_order[zone][sym]["zone_profit"] 
-                    query_order = self.query_order(sym,close_id)
-                    if query_order["status"] == 'XXXXX': #match response
+                    query_order = self.API.query_order(sym,close_id)
+                    if query_order["status"] == 'XXXXX': #match response!
+                        self.open_order[zone][sym]["close_price"] = query_order['price']
+                        self.open_order[zone][sym]["close_date"] = query_order["updateTime"]
+                        close_date = self.open_order[zone][sym]["close_date"] 
+                        close_price = self.open_order[zone][sym]["close_price"] 
+                        self.open_order[zone][sym]["status"] =='close'
                         print(f'                                                                                                                                              ',end='\r')
-                        print(f' ----- order match {zone} {sym} id:{close_id} price:{close_price} {date}')
+                        print(f' ----- order match {zone} {sym} id:{close_id} price:{close_price} {close_date}')
                         print('')
                         status_order.append(True)  
                     else:
                         status_order.append(False)  
                 else:
-                    status_order.append(True) 
+                    status_order.append(True)
+                break 
 
             if all(status_order):
-                print(f'----- close order {zone} {zone_profit} {date} ----- ')
-                print('')
                 for sym in self.open_order[zone].keys():#select zone
                     self.write_log(self.open_order[zone][sym])
+                    zone_profit = self.open_order[zone][sym]["zone_profit"] 
+                print(f'----- close order {zone} {zone_profit} ----- ')
+                print('')
+
                 del self.open_order[zone]
                 self.save_open_order() 
      
@@ -489,34 +507,43 @@ class main():
     #-----log close orders fn------
     #dev
     def close_order_manage_orders(self,zone):
-        z_num = 0
+        
         zProfit = 0
+        #cal profit
         for sym in self.order[f'{zone}'].keys():
             zProfit = zProfit +  self.order[f'{zone}'][sym]['order_profit'] 
 
-        if f'{zone}' not in self.open_order.keys():
+        #check duplicate zone when limit zone don't match
+        #add zone order to open_order 
+        if f'{zone}' not in self.open_order.keys():#f'{zone} not duplicate?
+            self.open_order[f'{zone}']={}
             for sym in self.order[f'{zone}'].keys():
+                #add z profit eatch symbol in zone
                 self.order[f'{zone}'][sym]['zone_profit']=zProfit
                 close_id = self.order[f'{zone}'][sym]['close_id']
                 close_price = self.order[f'{zone}'][sym]['close_price']
                 print(f'----- send order {zone} {sym} id:{close_id} price:{close_price}')
+                #add eatch symbol in open_order
                 self.open_order[f'{zone}'][sym] = self.order[f'{zone}'][sym]
-                del self.order[f'{zone}']
+            del self.order[f'{zone}']
         else:
+            z_num = 0
             while z_num>100:
-                if f'{zone}({z_num})' in self.open_order[f'{zone}'].keys():
+                if f'{zone}({z_num})' in self.open_order[f'{zone}'].keys():#f'{zone}({z_num})' not duplicate?
+                    self.open_order[f'{zone}({z_num})']={}
                     for sym in self.order[f'{zone}'].keys():
+                        #add z profit eatch symbol in zone
                         self.order[f'{zone}'][sym]['zone_profit']=zProfit
-                        self.open_order[f'{zone}({z_num})'][sym] = self.order[f'{zone}'][sym]
                         close_id = self.order[f'{zone}'][sym]['close_id']
                         close_price = self.order[f'{zone}'][sym]['close_price']
-                        print(f' ----- send order {zone}({z_num}) {sym} id:{close_id} price:{close_price}')
-                        del self.order[f'{zone}']
+                        print(f'----- send order {zone} {sym} id:{close_id} price:{close_price}')
+                        #add eatch symbol in open_order
+                        self.open_order[f'{zone}'][sym] = self.order[f'{zone}'][sym]
+                        if(z_num>10):
+                            print(f'warning duplicate zone {zone}-{z_num}')
+                    del self.order[f'{zone}']
                     break
-                else:
-                    z_num  = z_num + 1
-                    if(z_num>10):
-                        print(f'warning duplicate zone {zone}-{z_num}')
+                z_num  = z_num + 1
         self.save_open_order()
         self.save_order()
         print('')
@@ -623,11 +650,11 @@ class main():
             self.zone = round((self.ticker['ask'] // self.margin) * self.margin,5)
             
             #----thread set 
-            #------open long condition ------
+            #------open long condition 
             thr_open_long = threading.Thread(target=self.long_open_conditon)
             #------check short_conditon
             thr_open_short = threading.Thread(target=self.short_open_conditon)
-               
+            
             #----thread start 
             thr_open_long.start()
             thr_open_short.start()
@@ -637,14 +664,21 @@ class main():
             
             #------check close_conditon
             self.close_order()
+            #------check match_order
+            self.check_match_order()
             
             ask  = self.ticker['ask']
             print(f'{self.sys[0].symbol}/{self.sys[1].symbol}:{self.sys_name} zone:{self.zone} ask:{ask} ma:{self.ma} {self.time_string}  timeout:{self.timeout}  ',end='\r')
         else:           
             print(f'{self.sys_name} connection failed {self.time_string}                                                                                          ',end='\r')
 
+
+############ set ############
 program = main()
 program.load_order()
+program.load_open_order()
+program.initialize_open_order()
+############ start ############
 while(program.system):
     program.start()
     time.sleep(0)
