@@ -20,8 +20,7 @@ class binanceAPI():
     def __init__(self,host,key,secret):
         self._api_host = host
         self._api_key = key
-        self._api_secret  = secret
-        self.ts = int(time.time() * 1000)
+        self._api_secret  = bytes(secret, 'utf-8')
         self._subaccount_name = ""
         self.header = {
         'Accept': 'application/json',
@@ -113,14 +112,14 @@ class binanceAPI():
             return res
     
     def place_orders(self,market,side,positionSide,size,price,type_ord):
-        tm=int(time.time()*1000)    
+        tm=time.time() 
         data = {'symbol':market,
                 'side'  :side,
                 'positionSide': positionSide,
                 'type':type_ord,
                 'quantity':size,
                 'price'  :price,
-                'timestamp':tm
+                'timestamp':int(tm*1000)   
                 }
             
         res =  self._post(f'/fapi/v1/order ',data)
@@ -396,10 +395,9 @@ class main():
             for i in range(len(self.sys)):
                 price = self.sys[i].ticker['ask'] if self.side[i] == 'LONG' else self.sys[i].ticker['bid']
                 #comment
-                comment_askzone = round(self.ticker['ask'],5)
-                comment_ask = round(self.sys[i].ticker['ask'],5)
-                comment_bid = round(self.sys[i].ticker['bid'],5)      
-                comment = f'open:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
+                zone = self.ticker['ask']
+                sym = self.sys[i].symbol 
+                comment =  f'open:{zone} symbol:{sym} [{price}]'
                 #place_orders_open
                 dict_order.append(self.place_orders_open(self.sys[i].symbol,self.side[i],self.cal_size(price),price,comment_askzone))
 
@@ -415,8 +413,8 @@ class main():
     #-----short order-----side[-i]            
     def short_open_conditon(self):
         #------check short_conditon
-        short_conditon = all([    self.ticker['bid'] > self.ma,
-                               abs(self.ticker['bid'] - self.zone) < self.margin/80,
+        short_conditon = all([    self.ticker['ask'] > self.ma,
+                               abs(self.ticker['ask'] - self.zone) < self.margin/80,
                                str(self.zone) not in self.order.keys()
                           ])
 
@@ -424,11 +422,10 @@ class main():
             dict_order=list([])
             for i in range(len(self.sys)):
                 price = self.sys[i].ticker['ask'] if self.side[-i] == 'LONG' else self.sys[i].ticker['bid']
-                #comment
-                comment_askzone = round(self.ticker['bid'],5)
-                comment_ask = round(self.sys[i].ticker['ask'],5)
-                comment_bid = round(self.sys[i].ticker['bid'],5)      
-                comment = f'open:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
+                zone = self.ticker['ask']
+                sym = self.sys[i].symbol
+                #comment 
+                comment =  f'open:{zone} symbol:{sym} [{price}]'
                 #place_orders_open
                 dict_order.append(self.place_orders_open(self.sys[i].symbol,self.side[-i],self.cal_size(price),price,comment))
 
@@ -562,9 +559,9 @@ class main():
             price = [self.sys[0].ticker['bid'],self.sys[1].ticker['ask']] 
             current_order_sys1 = ((self.order[f'{zone}'][self.sys[0].symbol]['size'] * price[0]) )
             current_order_sys2 = ((self.order[f'{zone}'][self.sys[1].symbol]['size'] * price[1]) )
-            fee = fee + (current_order_sys1 * self.fee)#fee ord 0
-            fee = fee + (current_order_sys2 * self.fee)#fee ord 1
+            fee = (current_order_sys2 * self.fee) + (current_order_sys1 * self.fee)
             conditon_close = (current_order_sys1 - open_order_sys1) + (open_order_sys2-current_order_sys2) > self.margin + self.slippage + fee
+            
             if(conditon_close): 
                 #------------test--------------
                 print(f'ord1:{(current_order_sys1 - open_order_sys1) }, ord2:{(open_order_sys2 - current_order_sys2) } ans:{conditon_close}')
@@ -574,12 +571,9 @@ class main():
                 dict_order=list([])            
                 for i in range(len(self.sys)):
                     #comment
-                    comment_askzone = round(self.ticker['ask'],5)
-                    comment_ask = round(self.sys[i].ticker['ask'],5)
-                    comment_bid = round(self.sys[i].ticker['bid'],5)      
-                    comment = self.order[f'{zone}'][self.sys[i].symbol]['order_comment'] + f'| close:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
+                    comment = self.order[f'{zone}'][self.sys[i].symbol]['order_comment'] + f'| close:{zone} sys{i}:[{price[0]},{price[1]}]'
                     #place_orders_close
-                    self.close_order_place_order(self.sys[i].symbol,self.side[i],self.cal_size(price),price[i],comment_askzone)
+                    self.close_order_place_order(self.sys[i].symbol,self.side[i],self.cal_size(price),price[i],comment)
                 print(f'                                                                                                                                              ',end='\r')
                 print(f' ----- close long order {zone} -----')
                 self.close_order_manage_orders(zone)
@@ -589,18 +583,14 @@ class main():
             price = [self.sys[0].ticker['ask'],self.sys[1].ticker['bid']] 
             current_order_sys1 = ((self.order[f'{zone}'][self.sys[0].symbol]['size'] * price[0]) )
             current_order_sys2 = ((self.order[f'{zone}'][self.sys[1].symbol]['size'] * price[1]) )
-            fee = fee + (current_order_sys1 * self.fee)#fee ord 0
-            fee = fee + (current_order_sys2 * self.fee)#fee ord 1
+            fee = (current_order_sys2 * self.fee) + (current_order_sys1 * self.fee)
             conditon_close = (open_order_sys1 - current_order_sys1) + (current_order_sys2-open_order_sys2) > self.margin + self.slippage + fee
             if(conditon_close): 
                 for i in range(len(self.sys)):
                     #comment
-                    comment_askzone = round(self.ticker['ask'],5)
-                    comment_ask = round(self.sys[i].ticker['ask'],5)
-                    comment_bid = round(self.sys[i].ticker['bid'],5)      
-                    comment = self.order[f'{zone}'][self.sys[i].symbol]['order_comment'] + f'| close:{comment_askzone} sys{i}:[{comment_bid},{comment_ask}]'
+                    comment = self.order[f'{zone}'][self.sys[i].symbol]['order_comment'] + f'| close:{zone} sys{i}:[{price[0]},{price[1]}]'
                     #place_orders_close
-                    self.close_order_place_order(self.sys[i].symbol,self.side[i],self.cal_size(price),price[i],comment_askzone)
+                    self.close_order_place_order(self.sys[i].symbol,self.side[i],self.cal_size(price),price[i],comment)
                 print(f'                                                                                                                                              ',end='\r')
                 print(f' ----- close short order {zone} ----- ')
                 self.close_order_manage_orders(zone)
