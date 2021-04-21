@@ -132,7 +132,7 @@ class binanceAPI():
             "cumQty": "0",
             "cumQuote": "0",
             "executedQty": "0",
-            "orderId": tm,
+            "orderId": int(tm),
             "avgPrice": "0.00000",
             "origQty": f"{origQty}",
             "price": f"{price}",

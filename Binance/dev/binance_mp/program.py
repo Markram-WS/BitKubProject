@@ -8,6 +8,11 @@ import threading
 import csv
 #----------
 import configparser
+#----------
+from binance_f import RequestClient
+from binance_f.constant.test import *
+from binance_f.base.printobject import *
+from binance_f.model.constant import *
 
 ###############################################################################################
 #----------------------------------------Binance API------------------------------------------#
@@ -24,10 +29,11 @@ class binanceAPI():
         self._subaccount_name = ""
         self.header = {
         'Accept': 'application/json',
-        'Content-Type': 'application/json',
+        'User-Agent': 'binance/python',
         'X-MBX-APIKEY': self._api_key,
         }
-        
+        self.client =  RequestClient(api_key=key, secret_key=secret)
+          
     def _json_encode(self,data):
         return json.dumps(data, separators=(',', ':'), sort_keys=True)
 
@@ -36,16 +42,28 @@ class binanceAPI():
         h = hmac.new(self._api_secret, msg=j.encode(), digestmod=hashlib.sha256)
         return h.hexdigest()
     
-    def _get(self,url,**kwargs ):
-        res = requests.get(self._api_host + url,**kwargs)
-        return json.loads(res.text)
+    def _get(self,url,**data):
+        if len(data) != 0:
+            signature = self._sign(data)
+            data['signature'] = signature
+            print(self._json_encode(data))
+            res = requests.get(self._api_host + url, headers=self.header ,data=self._json_encode(data))
+        else:   
+            res = requests.get(self._api_host + url)
+        try:
+            return json.loads(res.text)
+        except:
+            print(res)
     
     def _post(self,url,data ):
         signature = self._sign(data)
         data['sig'] = signature
-        res = requests.post(self.API_HOST + url, headers=self.header, data=self._json_encode(data))
-        return json.loads(res.text)
-    
+        res = requests.post(self._api_host + url, headers=self.header, data=self._json_encode(data))
+        try:
+            return json.loads(res.text)
+        except:
+            print(res)
+    #signature  => uc(hmac_sha256_hex($data, $api_secret)),
     def server_time(self):
         res = self._get(f'/fapi/v1/time')
         return res['serverTime']
@@ -111,50 +129,34 @@ class binanceAPI():
         except:
             return res
     
-    def place_orders(self,market,side,positionSide,size,price,type_ord):
-        tm=time.time() 
-        data = {'symbol':market,
-                'side'  :side,
-                'positionSide': positionSide,
-                'type':type_ord,
-                'quantity':size,
-                'price'  :price,
-                'timestamp':int(tm*1000) 
-                }
-            
-        #res =  self._post(f'/fapi/v1/order ',data)
+    def place_orders(self,symbol,side,positionSide,quantity,price,type_ord):
+        if type_ord == 'MARKET':
+            order = self.client.post_order(
+                    symbol=symbol, 
+                    side=side, 
+                    ordertype='MARKET', 
+                    quantity=quantity,
+                    positionSide=positionSide)
         
-        #-----test order-----
-    
-        origQty = data['quantity']
-        res = {
-            "clientOrderId": "testOrder",
-            "cumQty": "0",
-            "cumQuote": "0",
-            "executedQty": "0",
-            "orderId": tm,
-            "avgPrice": "0.00000",
-            "origQty": f"{origQty}",
-            "price": f"{price}",
-            "reduceOnly": 'false',
-            "side": f'{side}',
-            "positionSide": f'{positionSide}',
-            "status": "NEW",
-            "stopPrice": "0",      #please ignore when order type is TRAILING_STOP_MARKET
-            "closePosition": 'false',   #if Close-All
-            "symbol": f"{market}",
-            "timeInForce": "GTC",
-            "type": "MARKET",
-            "origType": "MARKET",
-            "activatePrice": "",    #activation price, only return with TRAILING_STOP_MARKET order
-            "priceRate": "",         #callback rate, only return with TRAILING_STOP_MARKET order
-            "updateTime": self.timestampToDatetime(tm),
-            "workingType": "CONTRACT_PRICE",
-            "priceProtect": 'false'       #if conditional order trigger is protected   
-            }
-    
-        #--------------------
-        return res
+        if type_ord == 'LIMIT':
+            order = self.client.post_order(
+                    symbol=symbol, 
+                    side=side, 
+                    ordertype='LIMIT', 
+                    quantity=quantity,
+                    price=price,
+                    positionSide=positionSide)
+        return order
+                  
+    def query_all_open_orders(self,symbol):
+        return self.client.get_all_orders(symbol=symbol)
+
+    def query_open_order(self,symbol,orderId):
+        return self.client.get_order(symbol=symbol,orderId=orderId)
+
+    def query_order(self,symbol,orderId):
+        return self.client.get_order(symbol=symbol,orderId=orderId)
+        
 
 ############################################################################################
 #------------------------------------  symbol class   -------------------------------------#
@@ -272,7 +274,7 @@ class main():
 
     ########################### order #############################
     def cal_size(self,price):
-        return  round(self.size/price,1)
+        return  f'{round(self.size/price,1)}'
 
     ########################### getdata ###########################   
     def time_check(self):
@@ -318,14 +320,19 @@ class main():
     
     ########################### open order ###########################         
     #-----place open orders fn------
-    def place_orders_open(self,sym,side,size,price,order_comment):
-        #place_orders('BTCUSDT','BUY','LONG',6,5000,'MARKET')
-        res = self.API.place_orders(sym,'BUY',side,size,price,'MARKET')
+    def place_orders_open(self,sym,positionSide,size,price,order_comment):
+        side='BUY' if positionSide == 'LONG' else 'SELL'
+        print('-------------Test 1-------------')
+        print(f'sym:{sym} side:{side} positionSide:{positionSide} size:{size} price:{price}')
+        res = self.API.place_orders(sym,side,positionSide,size,price,'MARKET')
+        print('-------------Test 2-------------')
+        print(res)
+        print(f'sym {sym}, side {side}, price {price}')
         return{ 'status':'open',
                 'orderId' : res['orderId'],
                 'open_date': res['updateTime'],
                 'open_price': float(res['price']),
-                'side':side,
+                'side':positionSide,
                 'size': float(res['origQty']),
                 'sl': '',
                 'tp': '',
@@ -346,14 +353,12 @@ class main():
             for i in range(len(self.sys)):
                 price = self.sys[i].ticker['ask'] if self.side[i] == 'LONG' else self.sys[i].ticker['bid']
                 zone = self.ticker['ask']
-                sym = self.sys[i].symbol
                 #comment 
-                comment =  f'open:{zone} symbol:{sym} [{price}]'
+                comment =  f'open:{zone} sys{i}:[{price}]'
                 #place_orders_open
                 dict_order.append(self.place_orders_open(self.sys[i].symbol,self.side[i],self.cal_size(price),price,comment))
                 
-            print(f'                                                                                                                                              ',end='\r')
-            print(f' ----- open long {self.zone} ----- ',end='\r')
+            print(f' --------------------------------------- open long {self.zone} ---------------------------------------')
             self.order[f'{self.zone}'] = {}
             for i in range(len(self.sys)):
                 self.order[f'{self.zone}'][self.sys[i].symbol] = dict_order[i]
@@ -364,8 +369,8 @@ class main():
     #-----short order-----side[-i]            
     def short_open_conditon(self):
         #------check short_conditon
-        short_conditon = all([ self.ticker['ask'] > self.ma,
-                               abs(self.ticker['ask'] - self.zone) < self.margin/80,
+        short_conditon = all([ self.ticker['bid'] > self.ma,
+                               abs(self.ticker['bid'] - self.zone) < self.margin/80,
                                str(self.zone) not in self.order.keys()
                           ])
 
@@ -374,14 +379,12 @@ class main():
             for i in range(len(self.sys)):
                 price = self.sys[i].ticker['ask'] if self.side[-i] == 'LONG' else self.sys[i].ticker['bid']
                 zone = self.ticker['ask']
-                sym = self.sys[i].symbol
                 #comment 
-                comment =  f'open:{zone} symbol:{sym} [{price}]'
+                comment =  f'open:{zone} sys{i}:[{price}]'
                 #place_orders_open
                 dict_order.append(self.place_orders_open(self.sys[i].symbol,self.side[-i],self.cal_size(price),price,comment))
                                   
-            print(f'                                                                                                                                              ',end='\r')                    
-            print(f' ----- open short {self.zone} ----- ',end='\r')
+            print(f' --------------------------------------- open short {self.zone} ---------------------------------------')
             self.order[f'{self.zone}'] = {}
             for i in range(len(self.sys)):
                 self.order[f'{self.zone}'][self.sys[i].symbol] = dict_order[i]
@@ -391,9 +394,10 @@ class main():
         
     ########################### close_order ###########################       
     #-----place close orders fn------
-    def place_orders_close(self,sym,side,size,price,zone,order_comment):
+    def place_orders_close(self,sym,positionSide,size,price,zone,order_comment):
         #place_orders('BTCUSDT','BUY','LONG',6,5000,'MARKET')
-        res = self.API.place_orders(sym,'SELL',side,size,price,'MARKET')
+        side='SELL' if positionSide == 'LONG' else 'BUY'
+        res = self.API.place_orders(sym,side,positionSide,size,price,'MARKET')
         self.order[f'{zone}'][sym]['status'] = 'close'
         self.order[f'{zone}'][sym]['close_id'] = res["orderId"]
         self.order[f'{zone}'][sym]['close_date'] = res["updateTime"]
@@ -426,7 +430,6 @@ class main():
         open_order_sys1 = self.order[f'{zone}'][self.sys[0].symbol]['size'] * self.order[f'{zone}'][self.sys[0].symbol]['open_price']
         open_order_sys2 = self.order[f'{zone}'][self.sys[1].symbol]['size'] * self.order[f'{zone}'][self.sys[1].symbol]['open_price']
         fee = self.order[f'{zone}'][self.sys[0].symbol]['fee'] + self.order[f'{zone}'][self.sys[1].symbol]['fee']
-
         zProfit = 0  
         conditon_close=False
         #-----CLOSE LONG
@@ -434,14 +437,10 @@ class main():
             price = [self.sys[0].ticker['bid'],self.sys[1].ticker['ask']] 
             current_order_sys1 = ((self.order[f'{zone}'][self.sys[0].symbol]['size'] * price[0]) )
             current_order_sys2 = ((self.order[f'{zone}'][self.sys[1].symbol]['size'] * price[1]) )
-            fee = (current_order_sys2 * self.fee) + (current_order_sys1 * self.fee) + fee
+            fee = (current_order_sys2 * self.fee) + (current_order_sys1 * self.fee)
             conditon_close = (current_order_sys1 - open_order_sys1) + (open_order_sys2-current_order_sys2) > self.margin + self.slippage + fee
             if(conditon_close): 
-                #------------test--------------
-                print(f'ord1:{(current_order_sys1 - open_order_sys1) }, ord2:{(open_order_sys2 - current_order_sys2) } ans:{conditon_close}')
-                print(f'price:{price}')
-                print(f'fee:{fee}')
-                #------------test--------------
+
                 dict_order=list([])            
                 for i in range(len(self.sys)):
                     #comment
@@ -545,7 +544,7 @@ class main():
             ask  = self.ticker['ask']
             print(f'{self.sys[0].symbol}/{self.sys[1].symbol}:{self.sys_name} zone:{self.zone} ask:{ask} ma:{self.ma} {self.time_string}  timeout:{self.timeout}  ',end='\r')
         else:           
-            print(f'{self.sys_name} connection failed {self.time_string}                                                                                          ',end='\r')
+            print(f'{self.sys_name} connection failed {self.time_string}                                                                             ',end='\r')
 
 program = main()
 program.load_order()
