@@ -163,8 +163,10 @@ class main():
                                abs(self.ticker['bid'] - self.zone) < self.margin/80,
                                str(self.zone) not in self.order.keys()
                           ])
-        print(f' --------------------------------------- open short {self.zone} ---------------------------------------')
+        
         if(short_conditon):
+            self.order[f'{self.zone}'] = {}
+            print(f' --------------------------------------- open short {self.zone} ---------------------------------------')
             for i in range(len(self.sys)):
                 price = self.sys[i].ticker['ask'] if self.side[-i] == 'LONG' else self.sys[i].ticker['bid']
                 zone = self.ticker['ask']
