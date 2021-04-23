@@ -337,16 +337,16 @@ class main():
             
             #----thread set 
             #------check open long_conditon
-            thr_open_long = threading.Thread(target=self.long_open_conditon)
+            #thr_open_long = threading.Thread(target=self.long_open_conditon)
             #------check open short_conditon
-            thr_open_short = threading.Thread(target=self.short_open_conditon)
+            #thr_open_short = threading.Thread(target=self.short_open_conditon)
                
             #----thread open order start 
-            thr_open_long.start()
-            thr_open_short.start()
+            #thr_open_long.start()
+            #thr_open_short.start()
             #----thread open order join 
-            thr_open_long.join()
-            thr_open_short.join()
+            #thr_open_long.join()
+            #thr_open_short.join()
             
             #------check close_conditon
             self.close_order()
