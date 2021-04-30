@@ -37,6 +37,7 @@ class main():
         self.symbol = {'symbol':config['SYSTEM']['symbol']}
         self.margin = float(config['SYSTEM']['margin'])
         self.quoteAssetNotional = float(config['SYSTEM']['quoteAssetNotional'])
+        self.line_token = config['SYSTEM']['line_token']
         
         #time
         self.tm = ''
@@ -63,6 +64,9 @@ class main():
         
         self.balance=dict()
         
+        
+
+
     ########################### getdata ###########################   
     def time_check(self):
         #get_time
@@ -173,7 +177,12 @@ class main():
                 res[self.baseAsset] = self.balance[self.baseAsset]
                 res[self.quoteAsset] = self.balance[self.quoteAsset]
                 write_csv(res,'log.csv')
+            
+            
 
+            msg_line = f'{self.system_name} {sym}:{ask} {quoteValue} {rebalanceQty}'
+            lineSendMas(self.line_token,msg_line)
+            
             #save value
             save_json(self.balance,'wallet.json')
             
@@ -223,9 +232,9 @@ class main():
         if wallet != {} and ticker:
             # load wallet.json 
             self.balance[self.baseAsset]['amt']  = round(float(wallet[self.baseAsset]['amt']),self.basePrecision)
-            self.balance[self.quoteAsset]['amt'] = round(float(wallet[self.basePrecision]['amt']),self.quotePrecision)
+            self.balance[self.quoteAsset]['amt'] = round(float(wallet[self.quoteAsset]['amt']),self.quotePrecision)
             self.balance[self.baseAsset]['value']  = round(float(wallet[self.baseAsset]['value']),self.quotePrecision)
-            self.balance[self.quoteAsset]['value'] = round(float(wallet[self.basePrecision]['value']),self.quotePrecision)
+            self.balance[self.quoteAsset]['value'] = round(float(wallet[self.quoteAsset]['value']),self.quotePrecision)
         elif(ticker):
             # have't file wallet.json 
             # ask price
@@ -234,15 +243,15 @@ class main():
             balance_binance = self.get_balance([self.baseAsset, self.quoteAsset])
             # create_sub_wallet_condition : # baseAsset:quoteAsset != 1:1 (quoteAssetNotional*2)
             if (balance_binance[self.quoteAsset] > self.quoteAssetNotional*2 
-                and balance_binance[self.baseAsset] < round(ask/self.quoteAssetNotional,self.basePrecision) ) :
+                and balance_binance[self.baseAsset] < round(self.quoteAssetNotional/ask,self.basePrecision) ) :
                 self.balance[self.baseAsset]['amt']  = round(balance_binance[self.baseAsset],self.basePrecision)
                 self.balance[self.quoteAsset]['amt'] = round( self.quoteAssetNotional*2 - round( ask*balance_binance[self.baseAsset] , self.quotePrecision) , self.quotePrecision)
                 self.balance[self.baseAsset]['value']  = round( ask*balance_binance[self.baseAsset] , self.quotePrecision)
                 self.balance[self.quoteAsset]['value'] = round( self.balance[self.quoteAsset]['amt'] , self.quotePrecision)
             # create_sub_wallet_condition : # baseAsset:quoteAsset == 1:1 (quoteAssetNotional)
             elif (balance_binance[self.quoteAsset] >= self.quoteAssetNotional 
-                  and balance_binance[self.baseAsset] >= ask/self.quoteAssetNotional):
-                self.balance[self.baseAsset]['amt']    = round( ask/self.quoteAssetNotional, self.basePrecision)
+                  and balance_binance[self.baseAsset] >= self.quoteAssetNotional/ask):
+                self.balance[self.baseAsset]['amt']    = round( self.quoteAssetNotional/ask, self.basePrecision)
                 self.balance[self.quoteAsset]['amt']   = round( self.quoteAssetNotional, self.quotePrecision)
                 self.balance[self.baseAsset]['value']  = round( self.quoteAssetNotional, self.quotePrecision)
                 self.balance[self.quoteAsset]['value'] = round( self.quoteAssetNotional, self.quotePrecision)
@@ -254,6 +263,27 @@ class main():
             return False
         
         return True
+
+    
+    def start(self):
+        if self.get_ticker() :
+            ask  = float(self.symbol['asks']) 
+            self.current_baseAsset = round(self.balance[self.baseAsset]['amt'] * ask,self.quotePrecision)
+            
+            if self.time_check() :
+                self.rebalance()
+            
+            
+            ask  = self.symbol['asks']
+            sym = self.symbol['symbol']
+            baseAmt = self.balance[self.baseAsset]['amt']
+            baseValue = self.balance[self.baseAsset]['value']
+            quoteValue = self.balance[self.quoteAsset]['amt']
+            diff = round(self.current_baseAsset - baseValue,self.quotePrecision)
+            diffPercent = round(diff/baseValue*100,2)
+            print(f'{self.system_name} {sym}:{ask} {baseAmt}[{self.current_baseAsset}]:{quoteValue}  {diff}[{diffPercent}%]   {self.time_string}',end='\r')
+        else:           
+            print(f'{self.system_name} connection failed {self.time_string}                                                                      ',end='\r')
 
 
 ################ initialize ################
