@@ -38,7 +38,7 @@ class main():
         self.symbol = config['SYSTEM']['symbol'].split(',')
         self.sys_name   = config['SYSTEM']['name']
         self.slippage   = float(config['SYSTEM']['slippage'])
-        self.order = load_order('data.json')
+        self.order = load_json('data.json')
         self.del_order_list = list([])
         self.ticker = {}
         self.zone = 0
@@ -152,7 +152,7 @@ class main():
                 self.order[f'{self.zone}'][self.sys[i].symbol] = order_response
                 print(order_response)
                 print('')
-            save_order(self.order,'data.json')
+            save_json(self.order,'data.json')
             print('--------')
             
     #-----short order-----side[-i]
@@ -178,7 +178,7 @@ class main():
                 self.order[f'{self.zone}'][self.sys[i].symbol] = order_response           
                 print(order_response)
                 print('')
-            save_order(self.order,'data.json')
+            save_json(self.order,'data.json')
             print('--------')
         
     ########################### close_order ###########################  
@@ -257,8 +257,8 @@ class main():
         #---CLOSE SHORT
         elif(self.order[f'{zone}'][self.sys[0].symbol]['side'] == 'SHORT'):
             price = [self.sys[0].ticker['ask'], self.sys[1].ticker['bid']] 
-            current_order_sys1 = ((self.order[f'{zone}'][self.sys[0].symbol]['size'] * price[0]) )
-            current_order_sys2 = ((self.order[f'{zone}'][self.sys[1].symbol]['size'] * price[1]) )
+            current_order_sys1 = (self.order[f'{zone}'][self.sys[0].symbol]['size'] * price[0])
+            current_order_sys2 = (self.order[f'{zone}'][self.sys[1].symbol]['size'] * price[1])
             fee = fee + (current_order_sys2 * self.fee) + (current_order_sys1 * self.fee)
             conditon_close = (open_order_sys1 - current_order_sys1) + (current_order_sys2-open_order_sys2) > self.margin + self.slippage + fee
             if(conditon_close): 
@@ -297,7 +297,7 @@ class main():
                 print('--------')
                 del self.order[del_zone]
                 
-            save_order(self.order,'data.json')
+            save_json(self.order,'data.json')
             self.del_order_list=[]
 
             

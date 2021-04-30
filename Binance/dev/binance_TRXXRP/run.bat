@@ -1,4 +1,4 @@
 call D:\Python\BitKubProject\venv\Scripts\activate
-python program.py
+python binance_spot.py
 pause
 
