@@ -7,15 +7,15 @@ import time
 #-------------------------------------------------------
 # API info
 API_HOST = 'https://api.bitkub.com'
-API_KEY = '343f340ba1aafd4a4d056801c791f14d'
-API_SECRET = b'4fd33427a5d4dfddb93ce38251c4d8e5'
+API_KEY = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+API_SECRET = b'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
 # database info
 mongo = database(
     database='trading_db'
     ,collection= 'bitkubRebalance'
-    ,mongodb_srv="mongodb+srv://wasan:1234@cluster0.ujivx.gcp.mongodb.net/trading_db?retryWrites=true&w=majority"
-    ,line_token='QHQPbxDrgD35meR5LDh0PniRVDGYUBNrH8ls42ThiKM'
+    ,mongodb_srv="mongodb+srv://xxxx:xxxx@cluster0.ujivx.gcp.mongodb.net/trading_db?retryWrites=true&w=majority"
+    ,line_token='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
     )
 #-------------------------------------------------------
 def initialization():  
