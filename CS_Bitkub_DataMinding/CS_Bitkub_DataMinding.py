@@ -10,8 +10,8 @@ from pymongo import MongoClient,results
 
 # API info
 API_HOST = 'https://api.bitkub.com'
-API_KEY = '343f340ba1aafd4a4d056801c791f14d'
-API_SECRET = b'4fd33427a5d4dfddb93ce38251c4d8e5'
+API_KEY = 'xxxxxxxxxxxxxxxxxxxxxxxxx'
+API_SECRET = b'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
 
 
 header = {
